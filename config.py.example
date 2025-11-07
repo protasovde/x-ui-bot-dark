@@ -1,0 +1,41 @@
+"""
+Конфигурационный файл для Telegram бота x-ui
+Скопируйте этот файл в config.py и заполните своими данными
+
+ВАЖНО: Не коммитьте config.py в git! Этот файл содержит секретные данные.
+Используйте переменные окружения для безопасного хранения токенов и паролей.
+"""
+import os
+from typing import Optional
+
+# Telegram Bot Token (получить у @BotFather)
+# Можно установить через переменную окружения: export TELEGRAM_BOT_TOKEN="ваш_токен"
+TELEGRAM_BOT_TOKEN: Optional[str] = os.getenv("TELEGRAM_BOT_TOKEN", "")
+
+# x-ui API настройки
+# Можно установить через переменные окружения для безопасности
+XUI_BASE_URL: str = os.getenv("XUI_BASE_URL", "http://your-server:54321")
+XUI_USERNAME: str = os.getenv("XUI_USERNAME", "your_username")
+XUI_PASSWORD: str = os.getenv("XUI_PASSWORD", "your_password")
+
+# Список разрешенных Telegram username пользователей (опционально, оставьте пустым для открытого доступа)
+# Указывайте username без символа @
+ALLOWED_USERNAMES: list[str] = [
+    # Пример: "username1", "username2"
+]
+
+# ID inbound по умолчанию (если не указан в запросе)
+DEFAULT_INBOUND_ID: Optional[int] = None
+
+# Администраторы бота (Telegram username без @)
+ADMIN_USERNAMES: list[str] = [
+    # Пример: "your_username"
+    # Добавьте сюда username администраторов
+]
+
+# Интервал проверки напоминаний (в секундах)
+REMINDER_CHECK_INTERVAL: int = 3600  # 1 час
+
+# Напоминания за N дней до истечения
+REMINDER_DAYS: list[int] = [10, 3]
+

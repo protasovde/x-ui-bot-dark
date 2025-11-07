@@ -1,0 +1,749 @@
+"""
+Telegram бот для выдачи VPN конфигураций из x-ui
+"""
+import logging
+import asyncio
+from datetime import datetime, timedelta
+from typing import Optional
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram.ext import (
+    Application,
+    CommandHandler,
+    MessageHandler,
+    CallbackQueryHandler,
+    ContextTypes,
+    filters
+)
+from xui_client import XUIClient
+from database import Database
+from config import (
+    TELEGRAM_BOT_TOKEN, 
+    ALLOWED_USERNAMES, 
+    DEFAULT_INBOUND_ID,
+    ADMIN_USERNAMES,
+    REMINDER_CHECK_INTERVAL,
+    REMINDER_DAYS
+)
+
+# Настройка логирования
+logging.basicConfig(
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    level=logging.INFO
+)
+logger = logging.getLogger(__name__)
+
+# Инициализация клиента x-ui и базы данных
+xui_client = XUIClient()
+db = Database()
+
+
+def check_access(username: Optional[str]) -> bool:
+    """Проверка доступа пользователя по username"""
+    if not ALLOWED_USERNAMES:
+        return True  # Открытый доступ
+    if not username:
+        return False  # Нет username - нет доступа
+    # Нормализуем username (убираем @ если есть)
+    username_normalized = username.lstrip('@').lower()
+    return username_normalized in [u.lstrip('@').lower() for u in ALLOWED_USERNAMES]
+
+
+def is_admin(username: Optional[str]) -> bool:
+    """Проверка, является ли пользователь администратором по username"""
+    if not username:
+        return False
+    # Нормализуем username (убираем @ если есть)
+    username_normalized = username.lstrip('@').lower()
+    if username_normalized in [u.lstrip('@').lower() for u in ADMIN_USERNAMES]:
+        return True
+    # Также проверяем в базе данных (для обратной совместимости)
+    return False
+
+
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Обработчик команды /start"""
+    user_id = update.effective_user.id
+    username = update.effective_user.username
+    full_name = update.effective_user.full_name
+    
+    # Регистрируем пользователя в базе при первом запуске
+    user = db.get_user(user_id)
+    if not user:
+        db.add_user(user_id, username, full_name, 0)
+        user = db.get_user(user_id)
+    
+    if not check_access(username):
+        await update.message.reply_text(
+            "❌ У вас нет доступа к этому боту.\n"
+            "💡 Убедитесь, что у вас установлен username в настройках Telegram."
+        )
+        return
+    
+    limit = user.get("config_limit", 0) if user else 0
+    created = user.get("configs_created", 0) if user else 0
+    
+    welcome_text = f"""
+🤖 Привет! Я бот для получения VPN конфигураций из x-ui.
+
+📊 Ваш статус:
+• Лимит конфигов: {limit}
+• Использовано: {created}/{limit}
+
+📋 Доступные команды:
+/list - Список всех inbounds
+/clients <inbound_id> - Список клиентов для inbound
+/get <email> - Получить конфигурацию по email
+/myinfo - Моя информация
+/help - Показать справку
+
+💡 Используйте /list чтобы увидеть доступные серверы.
+"""
+    
+    if is_admin(username):
+        welcome_text += "\n🔧 Админские команды:\n/adminhelp - Справка по админским командам"
+    
+    await update.message.reply_text(welcome_text)
+
+
+async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Обработчик команды /help"""
+    username = update.effective_user.username
+    
+    if not check_access(username):
+        await update.message.reply_text("❌ У вас нет доступа к этому боту.")
+        return
+    
+    help_text = """
+📖 Справка по использованию бота:
+
+/list - Показать список всех доступных inbounds с их ID
+
+/clients <inbound_id> - Показать список всех клиентов для указанного inbound
+Пример: /clients 1
+
+/get <email> - Получить конфигурацию клиента по email
+Пример: /get user@example.com
+
+/myinfo - Показать информацию о вашем аккаунте
+
+💡 Конфигурация будет отправлена в виде ссылки, которую можно импортировать в VPN клиент.
+"""
+    await update.message.reply_text(help_text)
+
+
+async def myinfo_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Показать информацию о пользователе"""
+    user_id = update.effective_user.id
+    username = update.effective_user.username
+    
+    if not check_access(username):
+        await update.message.reply_text("❌ У вас нет доступа к этому боту.")
+        return
+    
+    user = db.get_user(user_id)
+    if not user:
+        await update.message.reply_text("❌ Пользователь не найден в базе.")
+        return
+    
+    limit = user.get("config_limit", 0)
+    created = user.get("configs_created", 0)
+    remaining = max(0, limit - created)
+    
+    info_text = f"""
+📊 Информация о вашем аккаунте:
+
+🆔 ID: {user_id}
+👤 Имя: {user.get('full_name', 'N/A')}
+📝 Username: @{user.get('username', 'N/A')}
+
+📦 Лимит конфигов: {limit}
+✅ Использовано: {created}
+⏳ Осталось: {remaining}
+
+💡 Обратитесь к администратору для увеличения лимита.
+"""
+    
+    await update.message.reply_text(info_text)
+
+
+# ========== АДМИНСКИЕ КОМАНДЫ ==========
+
+async def admin_help(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Справка по админским командам"""
+    username = update.effective_user.username
+    
+    if not is_admin(username):
+        await update.message.reply_text("❌ У вас нет прав администратора.")
+        return
+    
+    help_text = """
+🔧 Админские команды:
+
+/adduser <username> <limit> - Добавить пользователя по username и установить лимит
+Пример: /adduser @username 5
+
+/setlimit <username> <limit> - Изменить лимит конфигов для пользователя
+Пример: /setlimit @username 10
+
+/users - Показать список всех пользователей
+
+/sync_reminders - Синхронизировать напоминания из x-ui
+
+💡 Username можно указывать с @ или без него.
+"""
+    await update.message.reply_text(help_text)
+
+
+async def add_user_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Добавить пользователя (админ)"""
+    username = update.effective_user.username
+    
+    if not is_admin(username):
+        await update.message.reply_text("❌ У вас нет прав администратора.")
+        return
+    
+    if len(context.args) < 2:
+        await update.message.reply_text(
+            "❌ Использование: /adduser <username> <limit>\n"
+            "Пример: /adduser @username 5"
+        )
+        return
+    
+    try:
+        username = context.args[0].lstrip('@')
+        limit = int(context.args[1])
+        
+        # Получаем информацию о пользователе из Telegram
+        # Для этого нужно найти пользователя по username
+        # В Telegram Bot API нет прямого способа получить user_id по username
+        # Поэтому нужно попросить пользователя написать боту
+        
+        await update.message.reply_text(
+            f"⏳ Ищу пользователя @{username}...\n\n"
+            "💡 Если пользователь не найден, попросите его написать боту /start, "
+            "а затем используйте команду /setlimit для установки лимита."
+        )
+        
+        # Попробуем найти пользователя в базе по username
+        user = db.get_user_by_username(username)
+        if user:
+            db.set_config_limit(user['user_id'], limit)
+            await update.message.reply_text(
+                f"✅ Пользователь @{username} найден. Лимит установлен: {limit}"
+            )
+        else:
+            await update.message.reply_text(
+                f"⚠️ Пользователь @{username} не найден в базе.\n"
+                "Попросите его написать боту /start, затем используйте /setlimit."
+            )
+            
+    except ValueError:
+        await update.message.reply_text("❌ Лимит должен быть числом.")
+    except Exception as e:
+        logger.error(f"Ошибка в add_user_command: {e}")
+        await update.message.reply_text(f"❌ Ошибка: {str(e)}")
+
+
+async def set_limit_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Установить лимит конфигов (админ)"""
+    username = update.effective_user.username
+    
+    if not is_admin(username):
+        await update.message.reply_text("❌ У вас нет прав администратора.")
+        return
+    
+    if len(context.args) < 2:
+        await update.message.reply_text(
+            "❌ Использование: /setlimit <username> <limit>\n"
+            "Пример: /setlimit @username 10"
+        )
+        return
+    
+    try:
+        username = context.args[0].lstrip('@')
+        limit = int(context.args[1])
+        
+        user = db.get_user_by_username(username)
+        if not user:
+            await update.message.reply_text(
+                f"❌ Пользователь @{username} не найден в базе.\n"
+                "Попросите его написать боту /start."
+            )
+            return
+        
+        db.set_config_limit(user['user_id'], limit)
+        await update.message.reply_text(
+            f"✅ Лимит для @{username} установлен: {limit} конфигов"
+        )
+        
+        # Уведомляем пользователя
+        try:
+            await context.bot.send_message(
+                chat_id=user['user_id'],
+                text=f"📢 Уведомление:\nВаш лимит конфигов изменен на {limit}."
+            )
+        except:
+            pass  # Пользователь может заблокировать бота
+            
+    except ValueError:
+        await update.message.reply_text("❌ Лимит должен быть числом.")
+    except Exception as e:
+        logger.error(f"Ошибка в set_limit_command: {e}")
+        await update.message.reply_text(f"❌ Ошибка: {str(e)}")
+
+
+async def list_users_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Показать список всех пользователей (админ)"""
+    username = update.effective_user.username
+    
+    if not is_admin(username):
+        await update.message.reply_text("❌ У вас нет прав администратора.")
+        return
+    
+    users = db.get_all_users()
+    
+    if not users:
+        await update.message.reply_text("📭 В базе нет пользователей.")
+        return
+    
+    text = "📋 Список пользователей:\n\n"
+    
+    for user in users:
+        user_id_db = user.get("user_id")
+        username = user.get("username", "N/A")
+        full_name = user.get("full_name", "N/A")
+        limit = user.get("config_limit", 0)
+        created = user.get("configs_created", 0)
+        is_admin_user = "🔧" if user.get("is_admin") else ""
+        
+        text += f"{is_admin_user} @{username} ({full_name})\n"
+        text += f"   ID: {user_id_db}\n"
+        text += f"   Лимит: {limit} | Использовано: {created}\n"
+        text += "─" * 30 + "\n\n"
+    
+    await update.message.reply_text(text)
+
+
+async def sync_reminders_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Синхронизировать напоминания из x-ui (админ)"""
+    username = update.effective_user.username
+    
+    if not is_admin(username):
+        await update.message.reply_text("❌ У вас нет прав администратора.")
+        return
+    
+    try:
+        await update.message.reply_text("⏳ Синхронизирую напоминания из x-ui...")
+        
+        users = db.get_all_users()
+        synced_count = 0
+        
+        for user in users:
+            user_id_db = user.get("user_id")
+            db.sync_reminders_from_xui(xui_client, user_id_db)
+            synced_count += 1
+        
+        await update.message.reply_text(
+            f"✅ Синхронизация завершена. Обработано пользователей: {synced_count}"
+        )
+        
+    except Exception as e:
+        logger.error(f"Ошибка в sync_reminders_command: {e}")
+        await update.message.reply_text(f"❌ Ошибка: {str(e)}")
+
+
+# ========== ОСНОВНЫЕ КОМАНДЫ ==========
+
+async def list_inbounds(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Обработчик команды /list - показать список inbounds"""
+    username = update.effective_user.username
+    
+    if not check_access(username):
+        await update.message.reply_text("❌ У вас нет доступа к этому боту.")
+        return
+    
+    try:
+        await update.message.reply_text("⏳ Получаю список серверов...")
+        inbounds = xui_client.get_inbounds()
+        
+        if not inbounds:
+            await update.message.reply_text("❌ Не удалось получить список inbounds или список пуст.")
+            return
+        
+        text = "📋 Список доступных inbounds:\n\n"
+        keyboard = []
+        
+        for inbound in inbounds:
+            inbound_id = inbound.get("id")
+            remark = inbound.get("remark", f"Inbound {inbound_id}")
+            protocol = inbound.get("protocol", "unknown")
+            port = inbound.get("port", "N/A")
+            traffic = inbound.get("up", 0) + inbound.get("down", 0)
+            
+            text += f"🆔 ID: {inbound_id}\n"
+            text += f"📝 Название: {remark}\n"
+            text += f"🔌 Протокол: {protocol.upper()}\n"
+            text += f"🚪 Порт: {port}\n"
+            text += f"📊 Трафик: {traffic / (1024**3):.2f} GB\n"
+            text += "─" * 20 + "\n\n"
+            
+            # Добавляем кнопку для получения клиентов
+            keyboard.append([
+                InlineKeyboardButton(
+                    f"📧 Клиенты ({remark})",
+                    callback_data=f"clients_{inbound_id}"
+                )
+            ])
+        
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        await update.message.reply_text(text, reply_markup=reply_markup)
+        
+    except Exception as e:
+        logger.error(f"Ошибка в list_inbounds: {e}")
+        await update.message.reply_text(f"❌ Ошибка: {str(e)}")
+
+
+async def list_clients(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Обработчик команды /clients"""
+    username = update.effective_user.username
+    
+    if not check_access(username):
+        await update.message.reply_text("❌ У вас нет доступа к этому боту.")
+        return
+    
+    if not context.args:
+        await update.message.reply_text(
+            "❌ Укажите ID inbound.\nПример: /clients 1"
+        )
+        return
+    
+    try:
+        inbound_id = int(context.args[0])
+        await update.message.reply_text(f"⏳ Получаю список клиентов для inbound {inbound_id}...")
+        
+        clients = xui_client.get_inbound_clients(inbound_id)
+        
+        if not clients:
+            await update.message.reply_text(f"❌ Не найдено клиентов для inbound {inbound_id}.")
+            return
+        
+        text = f"📋 Клиенты для inbound {inbound_id}:\n\n"
+        keyboard = []
+        
+        for client in clients:
+            email = client.get("email", "N/A")
+            total = client.get("total", 0)
+            expire = client.get("expireTime", 0)
+            
+            text += f"📧 Email: {email}\n"
+            text += f"📊 Трафик: {total / (1024**3):.2f} GB\n"
+            if expire > 0:
+                expire_date = datetime.fromtimestamp(expire / 1000)
+                text += f"⏰ Истекает: {expire_date.strftime('%Y-%m-%d %H:%M')}\n"
+            text += "─" * 20 + "\n\n"
+            
+            # Добавляем кнопку для получения конфигурации
+            keyboard.append([
+                InlineKeyboardButton(
+                    f"📥 Получить конфиг ({email})",
+                    callback_data=f"get_{inbound_id}_{email}"
+                )
+            ])
+        
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        await update.message.reply_text(text, reply_markup=reply_markup)
+        
+    except ValueError:
+        await update.message.reply_text("❌ ID inbound должен быть числом.")
+    except Exception as e:
+        logger.error(f"Ошибка в list_clients: {e}")
+        await update.message.reply_text(f"❌ Ошибка: {str(e)}")
+
+
+async def get_config(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Обработчик команды /get"""
+    user_id = update.effective_user.id
+    username = update.effective_user.username
+    
+    if not check_access(username):
+        await update.message.reply_text("❌ У вас нет доступа к этому боту.")
+        return
+    
+    if not context.args:
+        await update.message.reply_text(
+            "❌ Укажите email клиента.\nПример: /get user@example.com"
+        )
+        return
+    
+    # Проверяем лимит
+    can_create, message = db.can_create_config(user_id)
+    if not can_create:
+        await update.message.reply_text(f"❌ {message}")
+        return
+    
+    email = " ".join(context.args)
+    
+    try:
+        await update.message.reply_text(f"⏳ Получаю конфигурацию для {email}...")
+        
+        # Находим inbound для этого email
+        inbounds = xui_client.get_inbounds()
+        target_inbound = None
+        target_inbound_id = None
+        
+        for inbound in inbounds:
+            inbound_id = inbound.get("id")
+            clients = xui_client.get_inbound_clients(inbound_id)
+            if any(c.get("email") == email for c in clients):
+                target_inbound = inbound
+                target_inbound_id = inbound_id
+                break
+        
+        if not target_inbound:
+            await update.message.reply_text(
+                f"❌ Не удалось найти конфигурацию для {email}."
+            )
+            return
+        
+        protocol = target_inbound.get("protocol", "vless").lower()
+        config = xui_client.get_client_config(target_inbound_id, email, protocol)
+        
+        if not config:
+            await update.message.reply_text(
+                f"❌ Не удалось получить конфигурацию для {email}."
+            )
+            return
+        
+        # Записываем выдачу конфига
+        db.record_issued_config(user_id, email, target_inbound_id)
+        
+        # Получаем информацию о клиенте для напоминаний
+        clients = xui_client.get_inbound_clients(target_inbound_id)
+        client = next((c for c in clients if c.get("email") == email), None)
+        
+        if client and client.get("expireTime", 0) > 0:
+            db.add_reminder(user_id, email, target_inbound_id, client.get("expireTime"))
+        
+        await update.message.reply_text(
+            f"✅ Конфигурация для {email}:\n\n"
+            f"`{config}`",
+            parse_mode='Markdown'
+        )
+        
+        # Также отправляем как обычный текст для удобства копирования
+        await update.message.reply_text(config)
+        
+        # Обновляем информацию о лимите
+        user = db.get_user(user_id)
+        if user:
+            limit = user.get("config_limit", 0)
+            created = user.get("configs_created", 0)
+            remaining = max(0, limit - created)
+            await update.message.reply_text(
+                f"📊 Осталось конфигов: {remaining}/{limit}"
+            )
+        
+    except Exception as e:
+        logger.error(f"Ошибка в get_config: {e}")
+        await update.message.reply_text(f"❌ Ошибка: {str(e)}")
+
+
+async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Обработчик нажатий на inline кнопки"""
+    query = update.callback_query
+    user_id = query.from_user.id
+    username = query.from_user.username
+    
+    if not check_access(username):
+        await query.answer("❌ У вас нет доступа к этому боту.", show_alert=True)
+        return
+    
+    await query.answer()
+    
+    data = query.data
+    
+    try:
+        if data.startswith("clients_"):
+            # Показать клиентов для inbound
+            inbound_id = int(data.split("_")[1])
+            
+            await query.edit_message_text(f"⏳ Получаю список клиентов...")
+            
+            clients = xui_client.get_inbound_clients(inbound_id)
+            
+            if not clients:
+                await query.edit_message_text(f"❌ Не найдено клиентов для inbound {inbound_id}.")
+                return
+            
+            text = f"📋 Клиенты для inbound {inbound_id}:\n\n"
+            keyboard = []
+            
+            for client in clients:
+                email = client.get("email", "N/A")
+                total = client.get("total", 0)
+                expire = client.get("expireTime", 0)
+                
+                text += f"📧 Email: {email}\n"
+                text += f"📊 Трафик: {total / (1024**3):.2f} GB\n"
+                if expire > 0:
+                    expire_date = datetime.fromtimestamp(expire / 1000)
+                    text += f"⏰ Истекает: {expire_date.strftime('%Y-%m-%d %H:%M')}\n"
+                text += "─" * 20 + "\n\n"
+                
+                keyboard.append([
+                    InlineKeyboardButton(
+                        f"📥 Получить конфиг ({email})",
+                        callback_data=f"get_{inbound_id}_{email}"
+                    )
+                ])
+            
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            await query.edit_message_text(text, reply_markup=reply_markup)
+            
+        elif data.startswith("get_"):
+            # Получить конфигурацию
+            parts = data.split("_", 2)
+            if len(parts) >= 3:
+                inbound_id = int(parts[1])
+                email = parts[2]
+                
+                # Проверяем лимит
+                can_create, message = db.can_create_config(user_id)
+                if not can_create:
+                    await query.answer(message, show_alert=True)
+                    return
+                
+                await query.edit_message_text(f"⏳ Получаю конфигурацию для {email}...")
+                
+                # Получаем протокол из inbound
+                inbounds = xui_client.get_inbounds()
+                inbound = next((i for i in inbounds if i.get("id") == inbound_id), None)
+                
+                if inbound:
+                    protocol = inbound.get("protocol", "vless").lower()
+                    config = xui_client.get_client_config(inbound_id, email, protocol)
+                    
+                    if config:
+                        # Записываем выдачу конфига
+                        db.record_issued_config(user_id, email, inbound_id)
+                        
+                        # Получаем информацию о клиенте для напоминаний
+                        clients = xui_client.get_inbound_clients(inbound_id)
+                        client = next((c for c in clients if c.get("email") == email), None)
+                        
+                        if client and client.get("expireTime", 0) > 0:
+                            db.add_reminder(user_id, email, inbound_id, client.get("expireTime"))
+                        
+                        await query.edit_message_text(
+                            f"✅ Конфигурация для {email}:\n\n"
+                            f"`{config}`",
+                            parse_mode='Markdown'
+                        )
+                        
+                        # Отправляем конфигурацию отдельным сообщением
+                        await context.bot.send_message(
+                            chat_id=query.message.chat_id,
+                            text=config
+                        )
+                        
+                        # Обновляем информацию о лимите
+                        user = db.get_user(user_id)
+                        if user:
+                            limit = user.get("config_limit", 0)
+                            created = user.get("configs_created", 0)
+                            remaining = max(0, limit - created)
+                            await context.bot.send_message(
+                                chat_id=query.message.chat_id,
+                                text=f"📊 Осталось конфигов: {remaining}/{limit}"
+                            )
+                    else:
+                        await query.edit_message_text(f"❌ Не удалось получить конфигурацию для {email}.")
+                else:
+                    await query.edit_message_text(f"❌ Inbound {inbound_id} не найден.")
+                    
+    except Exception as e:
+        logger.error(f"Ошибка в button_callback: {e}")
+        await query.edit_message_text(f"❌ Ошибка: {str(e)}")
+
+
+# ========== СИСТЕМА НАПОМИНАНИЙ ==========
+
+async def check_and_send_reminders(context: ContextTypes.DEFAULT_TYPE):
+    """Проверка и отправка напоминаний"""
+    try:
+        for days in REMINDER_DAYS:
+            reminders = db.get_pending_reminders(days)
+            
+            for reminder in reminders:
+                user_id = reminder.get("user_id")
+                email = reminder.get("email")
+                expire_time = reminder.get("expire_time")
+                reminder_id = reminder.get("id")
+                
+                expire_date = datetime.fromtimestamp(expire_time / 1000)
+                
+                message = f"""
+⏰ Напоминание о истечении VPN конфигурации
+
+📧 Email: {email}
+📅 Истекает через: {days} дней
+🗓️ Дата истечения: {expire_date.strftime('%Y-%m-%d %H:%M')}
+
+💡 Не забудьте продлить или создать новый конфиг!
+"""
+                
+                try:
+                    await context.bot.send_message(
+                        chat_id=user_id,
+                        text=message
+                    )
+                    db.mark_reminder_sent(reminder_id, days)
+                    logger.info(f"Напоминание отправлено пользователю {user_id} для {email} за {days} дней")
+                except Exception as e:
+                    logger.error(f"Ошибка отправки напоминания: {e}")
+                    
+    except Exception as e:
+        logger.error(f"Ошибка в check_and_send_reminders: {e}")
+
+
+def main():
+    """Главная функция для запуска бота"""
+    if not TELEGRAM_BOT_TOKEN:
+        logger.error("TELEGRAM_BOT_TOKEN не установлен! Установите его в переменных окружения или config.py")
+        return
+    
+    # Создаем приложение
+    application = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
+    
+    # Регистрируем обработчики
+    application.add_handler(CommandHandler("start", start))
+    application.add_handler(CommandHandler("help", help_command))
+    application.add_handler(CommandHandler("myinfo", myinfo_command))
+    application.add_handler(CommandHandler("list", list_inbounds))
+    application.add_handler(CommandHandler("clients", list_clients))
+    application.add_handler(CommandHandler("get", get_config))
+    
+    # Админские команды
+    application.add_handler(CommandHandler("adminhelp", admin_help))
+    application.add_handler(CommandHandler("adduser", add_user_command))
+    application.add_handler(CommandHandler("setlimit", set_limit_command))
+    application.add_handler(CommandHandler("users", list_users_command))
+    application.add_handler(CommandHandler("sync_reminders", sync_reminders_command))
+    
+    application.add_handler(CallbackQueryHandler(button_callback))
+    
+    # Настраиваем периодическую проверку напоминаний
+    job_queue = application.job_queue
+    job_queue.run_repeating(
+        check_and_send_reminders,
+        interval=REMINDER_CHECK_INTERVAL,
+        first=10  # Первая проверка через 10 секунд после запуска
+    )
+    
+    # Запускаем бота
+    logger.info("Бот запущен...")
+    application.run_polling(allowed_updates=Update.ALL_TYPES)
+
+
+if __name__ == "__main__":
+    main()

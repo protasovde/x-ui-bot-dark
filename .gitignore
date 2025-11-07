@@ -1,0 +1,44 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+.venv
+
+# База данных
+*.db
+*.sqlite
+*.sqlite3
+
+# Конфигурация с секретами
+config.py
+upload.py
+setup_git.py
+
+# Логи
+*.log
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Архивы
+*.zip
+*.tar.gz
+*.rar
+*.7z
+
+# Временные файлы
+*.tmp
+*.bak
