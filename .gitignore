@@ -30,6 +30,7 @@ deploy_to_server.py
 check_xui_connection.py
 fix_xui_url.py
 SSH_COMMANDS.md
+deploy.py
 
 # Логи
 *.log
