@@ -20,7 +20,7 @@ class XUIClient:
     def _login(self) -> bool:
         """Авторизация в x-ui панели"""
         try:
-            login_url = f"{self.base_url}/login"
+            login_url = f"{self.base_url}/panel/login"
             response = self.session.post(
                 login_url,
                 json={
