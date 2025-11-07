@@ -24,6 +24,8 @@ start_bot.sh
 deploy.sh
 check_server.sh
 fix_bugs.sh
+deploy_remote.sh
+check_remote.sh
 
 # Логи
 *.log
