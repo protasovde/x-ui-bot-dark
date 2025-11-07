@@ -21,6 +21,9 @@ setup_git.py
 .env
 start_bot.sh
 *.service
+deploy.sh
+check_server.sh
+fix_bugs.sh
 
 # Логи
 *.log
