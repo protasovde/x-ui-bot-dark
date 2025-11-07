@@ -732,13 +732,17 @@ def main():
     
     application.add_handler(CallbackQueryHandler(button_callback))
     
-    # Настраиваем периодическую проверку напоминаний
+    # Настраиваем периодическую проверку напоминаний (если JobQueue доступен)
     job_queue = application.job_queue
-    job_queue.run_repeating(
-        check_and_send_reminders,
-        interval=REMINDER_CHECK_INTERVAL,
-        first=10  # Первая проверка через 10 секунд после запуска
-    )
+    if job_queue is not None:
+        job_queue.run_repeating(
+            check_and_send_reminders,
+            interval=REMINDER_CHECK_INTERVAL,
+            first=10  # Первая проверка через 10 секунд после запуска
+        )
+        logger.info("Система напоминаний активирована")
+    else:
+        logger.warning("JobQueue не установлен. Напоминания отключены. Установите: pip install 'python-telegram-bot[job-queue]'")
     
     # Запускаем бота
     logger.info("Бот запущен...")
