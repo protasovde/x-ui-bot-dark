@@ -102,30 +102,43 @@ class XUIClient:
             return []
         
         try:
-            url = f"{self.base_url}/panel/inbound/list"
-            logger.info(f"Запрос списка inbounds: {url}")
+            # Пробуем разные варианты URL
+            urls_to_try = [
+                f"{self.base_url}/xui/inbound/list",
+                f"{self.base_url}/panel/inbound/list",
+                f"{self.base_url}/api/inbound/list",
+                f"{self.base_url}/inbound/list"
+            ]
             
-            response = self.session.get(url, timeout=10)
-            logger.info(f"Ответ получения inbounds: статус {response.status_code}")
+            for url in urls_to_try:
+                logger.info(f"Попытка запроса списка inbounds: {url}")
+                response = self.session.get(url, timeout=10)
+                logger.info(f"Ответ получения inbounds: статус {response.status_code}")
+                
+                if response.status_code == 200:
+                    try:
+                        data = response.json()
+                        logger.info(f"Ответ API: success={data.get('success')}, obj type={type(data.get('obj'))}")
+                        
+                        if data.get("success"):
+                            inbounds = data.get("obj", [])
+                            logger.info(f"Получено inbounds: {len(inbounds) if inbounds else 0}")
+                            if inbounds:
+                                logger.info(f"Первый inbound: {inbounds[0] if inbounds else 'None'}")
+                            return inbounds if inbounds else []
+                        else:
+                            error_msg = data.get('msg', 'Unknown error')
+                            logger.error(f"Ошибка API: {error_msg}")
+                    except json.JSONDecodeError as e:
+                        logger.error(f"Ошибка парсинга JSON: {e}, текст: {response.text[:500]}")
+                else:
+                    logger.warning(f"HTTP ошибка для {url}: {response.status_code}")
+                    if response.status_code != 404:
+                        # Если не 404, возможно это правильный URL, но с ошибкой
+                        logger.error(f"HTTP ошибка: {response.status_code}, ответ: {response.text[:500]}")
             
-            if response.status_code == 200:
-                try:
-                    data = response.json()
-                    logger.info(f"Ответ API: success={data.get('success')}, obj type={type(data.get('obj'))}")
-                    
-                    if data.get("success"):
-                        inbounds = data.get("obj", [])
-                        logger.info(f"Получено inbounds: {len(inbounds) if inbounds else 0}")
-                        if inbounds:
-                            logger.info(f"Первый inbound: {inbounds[0] if inbounds else 'None'}")
-                        return inbounds if inbounds else []
-                    else:
-                        error_msg = data.get('msg', 'Unknown error')
-                        logger.error(f"Ошибка API: {error_msg}")
-                except json.JSONDecodeError as e:
-                    logger.error(f"Ошибка парсинга JSON: {e}, текст: {response.text[:500]}")
-            else:
-                logger.error(f"HTTP ошибка: {response.status_code}, ответ: {response.text[:500]}")
+            # Если все URL не сработали, возвращаем пустой список
+            logger.error("Все варианты URL не сработали")
             return []
         except Exception as e:
             logger.error(f"Ошибка получения inbounds: {e}", exc_info=True)
@@ -140,11 +153,29 @@ class XUIClient:
             return []
         
         try:
-            url = f"{self.base_url}/panel/inbound/get/{inbound_id}"
-            logger.info(f"Запрос клиентов для inbound {inbound_id}: {url}")
+            # Пробуем разные варианты URL
+            urls_to_try = [
+                f"{self.base_url}/xui/inbound/get/{inbound_id}",
+                f"{self.base_url}/panel/inbound/get/{inbound_id}",
+                f"{self.base_url}/api/inbound/get/{inbound_id}",
+                f"{self.base_url}/inbound/get/{inbound_id}"
+            ]
             
-            response = self.session.get(url, timeout=10)
-            logger.info(f"Ответ получения клиентов: статус {response.status_code}")
+            response = None
+            for url in urls_to_try:
+                logger.info(f"Попытка запроса клиентов для inbound {inbound_id}: {url}")
+                test_response = self.session.get(url, timeout=10)
+                logger.info(f"Ответ получения клиентов: статус {test_response.status_code}")
+                
+                if test_response.status_code == 200:
+                    response = test_response
+                    break
+                else:
+                    logger.warning(f"HTTP ошибка для {url}: {test_response.status_code}")
+            
+            if not response:
+                logger.error("Все варианты URL для получения клиентов не сработали")
+                return []
             
             if response.status_code == 200:
                 try:
@@ -395,8 +426,37 @@ class XUIClient:
             clients.append(new_client)
             settings["clients"] = clients
             
-            # Обновляем inbound
-            update_url = f"{self.base_url}/panel/inbound/update/{inbound_id}"
+            # Обновляем inbound - пробуем разные варианты URL
+            update_urls_to_try = [
+                f"{self.base_url}/xui/inbound/update/{inbound_id}",
+                f"{self.base_url}/panel/inbound/update/{inbound_id}",
+                f"{self.base_url}/api/inbound/update/{inbound_id}",
+                f"{self.base_url}/inbound/update/{inbound_id}"
+            ]
+            
+            update_url = None
+            update_response = None
+            
+            for test_url in update_urls_to_try:
+                logger.info(f"Попытка обновления inbound {inbound_id}: {test_url}")
+                test_response = self.session.post(
+                    test_url,
+                    json=update_data,
+                    timeout=10
+                )
+                logger.info(f"Ответ обновления inbound: статус {test_response.status_code}")
+                
+                if test_response.status_code == 200:
+                    update_url = test_url
+                    update_response = test_response
+                    break
+                else:
+                    logger.warning(f"HTTP ошибка для {test_url}: {test_response.status_code}")
+            
+            if not update_response:
+                logger.error("Все варианты URL для обновления inbound не сработали")
+                return False
+            
             logger.info(f"Обновление inbound {inbound_id}: {update_url}")
             
             update_data = {
@@ -413,13 +473,6 @@ class XUIClient:
                 "down": inbound.get("down", 0)
             }
             
-            update_response = self.session.post(
-                update_url,
-                json=update_data,
-                timeout=10
-            )
-            
-            logger.info(f"Ответ обновления inbound: статус {update_response.status_code}")
             
             if update_response.status_code == 200:
                 try:
