@@ -811,15 +811,64 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # Обработка кнопок меню
         if data == "create_menu":
             await query.answer("Открываю меню создания клиента...")
-            # Создаем фейковое сообщение для вызова create_client
-            fake_message = Message(
-                message_id=query.message.message_id,
-                date=query.message.date,
-                chat=query.message.chat,
-                from_user=query.from_user
-            )
-            fake_update = Update(update_id=update.update_id, message=fake_message)
-            await create_client(fake_update, context)
+            # Вызываем create_client напрямую через callback
+            # Создаем временное сообщение для обработки
+            temp_msg = await query.message.reply_text("⏳ Получаю список серверов...")
+            inbounds = xui_client.get_inbounds()
+            
+            logger.info(f"Получено inbounds: {len(inbounds) if inbounds else 0}")
+            
+            if not inbounds:
+                await temp_msg.edit_text(
+                    "❌ Не удалось получить список inbounds или список пуст.\n"
+                    "Проверьте подключение к x-ui панели."
+                )
+                return
+            
+            text = "📋 Выберите сервер для создания клиента:\n\n"
+            keyboard = []
+            
+            for inbound in inbounds:
+                inbound_id = inbound.get("id")
+                remark = inbound.get("remark", f"Inbound {inbound_id}")
+                protocol = inbound.get("protocol", "unknown")
+                port = inbound.get("port", "N/A")
+                
+                text += f"🆔 ID: {inbound_id}\n"
+                text += f"📝 Название: {remark}\n"
+                text += f"🔌 Протокол: {protocol.upper()}\n"
+                text += f"🚪 Порт: {port}\n"
+                text += "─" * 20 + "\n\n"
+            
+            # Добавляем кнопки для каждого inbound в одну строку (2 кнопки в ряд)
+            buttons_per_row = 2
+            for i, inbound in enumerate(inbounds):
+                inbound_id = inbound.get("id")
+                remark = inbound.get("remark", f"Inbound {inbound_id}")
+                
+                if i % buttons_per_row == 0:
+                    keyboard.append([])
+                
+                keyboard[-1].append(
+                    InlineKeyboardButton(
+                        f"✨ {remark[:15]}",
+                        callback_data=f"create_{inbound_id}"
+                    )
+                )
+            
+            if not keyboard or not any(keyboard):
+                await temp_msg.edit_text("❌ Не удалось создать кнопки для выбора сервера.")
+                return
+            
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            total_buttons = sum(len(row) for row in keyboard)
+            logger.info(f"Отправляю сообщение с {len(keyboard)} строками кнопок, всего {total_buttons} кнопок")
+            
+            try:
+                await temp_msg.edit_text(text, reply_markup=reply_markup)
+            except Exception as e:
+                logger.error(f"Ошибка при отправке сообщения с кнопками: {e}")
+                await temp_msg.edit_text(f"❌ Ошибка при отправке кнопок: {str(e)}")
             return
         elif data == "get_my_config":
             await query.answer("Получаю ваш конфиг...")
