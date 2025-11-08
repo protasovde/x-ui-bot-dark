@@ -112,30 +112,32 @@ class XUIClient:
         
         try:
             # Пробуем разные варианты URL и методов
+            # 3x-ui (форк x-ui от MHSanaei)
+            # Источники:
+            # - GitHub: https://github.com/MHSanaei/3x-ui
+            # - Postman коллекция: https://www.postman.com/hsanaei/3x-ui/collection/q1l5l0u/3x-ui
             # webBasePath: /panel/ - базовый путь веб-интерфейса
-            # API endpoints обычно находятся по пути /panel/api/...
-            # Приоритет: сначала пробуем наиболее вероятные варианты
+            # Подтвержденный путь для 3x-ui: /panel/panel/inbounds
+            # Приоритет: сначала пробуем наиболее вероятные варианты для 3x-ui
             url_methods = [
-                # Официальные endpoints согласно документации x-ui
-                (f"{self.base_url}/panel/api/inbounds/list", "GET"),
-                (f"{self.base_url}/panel/api/inbounds/list", "POST"),
-                (f"{self.base_url}/panel/api/inbound/list", "GET"),
-                (f"{self.base_url}/panel/api/inbound/list", "POST"),
-                # Варианты с /panel/panel/ (для некоторых версий)
+                # Подтвержденный путь для 3x-ui (без /list)
+                (f"{self.base_url}/panel/panel/inbounds", "GET"),
+                (f"{self.base_url}/panel/panel/inbounds", "POST"),
+                # Варианты с /api/ для 3x-ui
                 (f"{self.base_url}/panel/panel/api/inbounds/list", "GET"),
                 (f"{self.base_url}/panel/panel/api/inbounds/list", "POST"),
-                (f"{self.base_url}/panel/panel/api/inbound/list", "GET"),
-                (f"{self.base_url}/panel/panel/api/inbound/list", "POST"),
+                (f"{self.base_url}/panel/panel/api/inbounds", "GET"),
+                (f"{self.base_url}/panel/panel/api/inbounds", "POST"),
+                # Стандартные endpoints согласно документации
+                (f"{self.base_url}/panel/api/inbounds/list", "GET"),
+                (f"{self.base_url}/panel/api/inbounds/list", "POST"),
+                (f"{self.base_url}/panel/api/inbounds", "GET"),
+                (f"{self.base_url}/panel/api/inbounds", "POST"),
                 # Варианты без /api/
                 (f"{self.base_url}/panel/inbounds/list", "GET"),
                 (f"{self.base_url}/panel/inbounds/list", "POST"),
-                (f"{self.base_url}/panel/inbound/list", "GET"),
-                (f"{self.base_url}/panel/inbound/list", "POST"),
-                # Варианты без /list в конце
-                (f"{self.base_url}/panel/api/inbounds", "GET"),
-                (f"{self.base_url}/panel/api/inbounds", "POST"),
-                (f"{self.base_url}/panel/panel/inbounds", "GET"),
-                (f"{self.base_url}/panel/panel/inbounds", "POST"),
+                (f"{self.base_url}/panel/inbounds", "GET"),
+                (f"{self.base_url}/panel/inbounds", "POST"),
             ]
             
             for url, method in url_methods:
@@ -477,9 +479,12 @@ class XUIClient:
         try:
             logger.info(f"Добавление клиента {email} к inbound {inbound_id}")
             # Получаем текущий inbound
-            # Получаем текущий inbound - пробуем разные варианты URL
+            # Получаем текущий inbound - пробуем разные варианты URL для 3x-ui
+            # Источники: https://github.com/MHSanaei/3x-ui
             urls_to_try = [
                 f"{self.base_url}/panel/panel/inbound/get/{inbound_id}",
+                f"{self.base_url}/panel/panel/api/inbound/get/{inbound_id}",
+                f"{self.base_url}/panel/api/inbound/get/{inbound_id}",
                 f"{self.base_url}/panel/inbound/get/{inbound_id}",
                 f"{self.base_url}/xui/inbound/get/{inbound_id}",
                 f"{self.base_url}/api/inbound/get/{inbound_id}",
@@ -565,9 +570,13 @@ class XUIClient:
                 "down": inbound.get("down", 0)
             }
             
-            # Обновляем inbound - пробуем разные варианты URL
+            # Обновляем inbound - пробуем разные варианты URL для 3x-ui
+            # Источники: https://github.com/MHSanaei/3x-ui
+            # Postman коллекция: https://www.postman.com/hsanaei/3x-ui/collection/q1l5l0u/3x-ui
             update_urls_to_try = [
                 f"{self.base_url}/panel/panel/inbound/update/{inbound_id}",
+                f"{self.base_url}/panel/panel/api/inbound/update/{inbound_id}",
+                f"{self.base_url}/panel/api/inbound/update/{inbound_id}",
                 f"{self.base_url}/panel/inbound/update/{inbound_id}",
                 f"{self.base_url}/xui/inbound/update/{inbound_id}",
                 f"{self.base_url}/api/inbound/update/{inbound_id}",
