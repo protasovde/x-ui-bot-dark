@@ -117,13 +117,21 @@ class XUIClient:
             # Важно: некоторые версии x-ui требуют POST с пустым телом или определенными параметрами
             url_methods = [
                 # POST запросы (x-ui часто использует POST для API)
+                # Варианты без /list в конце
+                (f"{self.base_url}/panel/panel/inbounds", "POST"),
+                (f"{self.base_url}/panel/panel/api/inbounds", "POST"),
+                (f"{self.base_url}/panel/api/inbounds", "POST"),
+                (f"{self.base_url}/panel/inbounds", "POST"),
+                # Варианты с /list в конце
                 (f"{self.base_url}/panel/panel/inbound/list", "POST"),
                 (f"{self.base_url}/panel/panel/api/inbound/list", "POST"),
                 (f"{self.base_url}/panel/api/inbound/list", "POST"),
                 (f"{self.base_url}/panel/inbound/list", "POST"),
-                (f"{self.base_url}/panel/panel/inbounds", "POST"),
-                (f"{self.base_url}/panel/panel/api/inbounds", "POST"),
                 # GET запросы (могут возвращать HTML, но пробуем с правильными заголовками)
+                (f"{self.base_url}/panel/panel/inbounds", "GET"),
+                (f"{self.base_url}/panel/panel/api/inbounds", "GET"),
+                (f"{self.base_url}/panel/api/inbounds", "GET"),
+                (f"{self.base_url}/panel/inbounds", "GET"),
                 (f"{self.base_url}/panel/panel/inbound/list", "GET"),
                 (f"{self.base_url}/panel/panel/api/inbound/list", "GET"),
                 (f"{self.base_url}/panel/api/inbound/list", "GET"),
@@ -142,7 +150,13 @@ class XUIClient:
                     if method == "GET":
                         response = self.session.get(url, headers=headers, timeout=10, allow_redirects=True)
                     else:
-                        response = self.session.post(url, json={}, headers=headers, timeout=10, allow_redirects=True)
+                        # Пробуем POST с пустым телом и с пустым JSON объектом
+                        # Некоторые версии x-ui требуют определенный формат
+                        try:
+                            response = self.session.post(url, json={}, headers=headers, timeout=10, allow_redirects=True)
+                        except:
+                            # Если не сработало, пробуем без json
+                            response = self.session.post(url, data={}, headers=headers, timeout=10, allow_redirects=True)
                     
                     logger.info(f"Ответ получения inbounds: статус {response.status_code}, Content-Type: {response.headers.get('Content-Type', 'unknown')}")
                     
