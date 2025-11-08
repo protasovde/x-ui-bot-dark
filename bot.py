@@ -191,8 +191,45 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     ]
     reply_markup = ReplyKeyboardMarkup(reply_keyboard, resize_keyboard=True)
     
-    await update.message.reply_text(welcome_text, reply_markup=reply_markup)
-    await update.message.reply_text("💡 Используйте кнопки выше для работы с ботом.", reply_markup=inline_markup)
+    # Пытаемся удалить предыдущие сообщения меню, если они есть
+    try:
+        if hasattr(context, 'bot_data') and context.bot_data:
+            # Удаляем предыдущее сообщение с меню
+            last_menu_msg_id = context.bot_data.get(f"last_menu_msg_{user_id}")
+            if last_menu_msg_id:
+                try:
+                    await context.bot.delete_message(
+                        chat_id=update.message.chat_id,
+                        message_id=last_menu_msg_id
+                    )
+                except Exception as e:
+                    logger.debug(f"Не удалось удалить предыдущее сообщение меню: {e}")
+            
+            # Удаляем предыдущее inline сообщение
+            last_inline_msg_id = context.bot_data.get(f"last_inline_msg_{user_id}")
+            if last_inline_msg_id:
+                try:
+                    await context.bot.delete_message(
+                        chat_id=update.message.chat_id,
+                        message_id=last_inline_msg_id
+                    )
+                except Exception as e:
+                    logger.debug(f"Не удалось удалить предыдущее inline сообщение: {e}")
+    except Exception as e:
+        logger.debug(f"Ошибка при попытке удалить предыдущие сообщения: {e}")
+    
+    # Отправляем новое сообщение с меню
+    menu_msg = await update.message.reply_text(welcome_text, reply_markup=reply_markup)
+    inline_msg = await update.message.reply_text("💡 Используйте кнопки выше для работы с ботом.", reply_markup=inline_markup)
+    
+    # Сохраняем message_id последнего сообщения меню для возможного удаления
+    try:
+        if not hasattr(context, 'bot_data'):
+            context.bot_data = {}
+        context.bot_data[f"last_menu_msg_{user_id}"] = menu_msg.message_id
+        context.bot_data[f"last_inline_msg_{user_id}"] = inline_msg.message_id
+    except Exception as e:
+        logger.debug(f"Не удалось сохранить message_id меню: {e}")
 
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -892,13 +929,9 @@ async def _create_client_for_inbound(update: Update, context: ContextTypes.DEFAU
             await update.callback_query.edit_message_text(result_text)
             # Отправляем конфигурацию отдельным сообщением
             await context.bot.send_message(chat_id=chat_id, text=config)
-            # Отправляем ссылки на приложения
-            await send_app_links(context, chat_id)
         else:
             await update.message.reply_text(result_text)
             await update.message.reply_text(config)
-            # Отправляем ссылки на приложения
-            await send_app_links(context, update.message.chat_id)
         
         # Обновляем информацию о лимите
         user = db.get_user(user_id)
@@ -1032,8 +1065,6 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         chat_id=query.message.chat_id,
                         text=config
                     )
-                    # Отправляем ссылки на приложения
-                    await send_app_links(context, query.message.chat_id)
                 else:
                     await query.edit_message_text(
                         f"❌ Конфиг для {email} не найден.\n"
@@ -1170,6 +1201,9 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         )
                 except ImportError:
                     pass
+            
+            # Отправляем ссылки на приложения
+            await send_app_links(context, query.message.chat_id)
             
             return
         elif data == "contact_admin":
