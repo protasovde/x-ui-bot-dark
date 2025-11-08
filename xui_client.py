@@ -112,33 +112,30 @@ class XUIClient:
         
         try:
             # Пробуем разные варианты URL и методов
-            # x-ui использует /panel/panel/... для API endpoints
+            # webBasePath: /panel/ - базовый путь веб-интерфейса
+            # API endpoints обычно находятся по пути /panel/api/...
             # Приоритет: сначала пробуем наиболее вероятные варианты
-            # Важно: некоторые версии x-ui требуют POST с пустым телом или определенными параметрами
             url_methods = [
-                # Официальный endpoint согласно документации x-ui
+                # Официальные endpoints согласно документации x-ui
                 (f"{self.base_url}/panel/api/inbounds/list", "GET"),
                 (f"{self.base_url}/panel/api/inbounds/list", "POST"),
-                # POST запросы (x-ui часто использует POST для API)
-                # Варианты без /list в конце
-                (f"{self.base_url}/panel/panel/inbounds", "POST"),
-                (f"{self.base_url}/panel/panel/api/inbounds", "POST"),
-                (f"{self.base_url}/panel/api/inbounds", "POST"),
-                (f"{self.base_url}/panel/inbounds", "POST"),
-                # Варианты с /list в конце
-                (f"{self.base_url}/panel/panel/inbound/list", "POST"),
-                (f"{self.base_url}/panel/panel/api/inbound/list", "POST"),
-                (f"{self.base_url}/panel/api/inbound/list", "POST"),
-                (f"{self.base_url}/panel/inbound/list", "POST"),
-                # GET запросы (могут возвращать HTML, но пробуем с правильными заголовками)
-                (f"{self.base_url}/panel/panel/inbounds", "GET"),
-                (f"{self.base_url}/panel/panel/api/inbounds", "GET"),
-                (f"{self.base_url}/panel/api/inbounds", "GET"),
-                (f"{self.base_url}/panel/inbounds", "GET"),
-                (f"{self.base_url}/panel/panel/inbound/list", "GET"),
-                (f"{self.base_url}/panel/panel/api/inbound/list", "GET"),
                 (f"{self.base_url}/panel/api/inbound/list", "GET"),
+                (f"{self.base_url}/panel/api/inbound/list", "POST"),
+                # Варианты с /panel/panel/ (для некоторых версий)
+                (f"{self.base_url}/panel/panel/api/inbounds/list", "GET"),
+                (f"{self.base_url}/panel/panel/api/inbounds/list", "POST"),
+                (f"{self.base_url}/panel/panel/api/inbound/list", "GET"),
+                (f"{self.base_url}/panel/panel/api/inbound/list", "POST"),
+                # Варианты без /api/
+                (f"{self.base_url}/panel/inbounds/list", "GET"),
+                (f"{self.base_url}/panel/inbounds/list", "POST"),
                 (f"{self.base_url}/panel/inbound/list", "GET"),
+                (f"{self.base_url}/panel/inbound/list", "POST"),
+                # Варианты без /list в конце
+                (f"{self.base_url}/panel/api/inbounds", "GET"),
+                (f"{self.base_url}/panel/api/inbounds", "POST"),
+                (f"{self.base_url}/panel/panel/inbounds", "GET"),
+                (f"{self.base_url}/panel/panel/inbounds", "POST"),
             ]
             
             for url, method in url_methods:
