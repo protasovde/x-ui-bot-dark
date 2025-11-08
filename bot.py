@@ -20,11 +20,16 @@ from config import (
     TELEGRAM_BOT_TOKEN, 
     ALLOWED_USERNAMES, 
     DEFAULT_INBOUND_ID,
-    CONFIG_EXPIRY_DAYS,
     ADMIN_USERNAMES,
     REMINDER_CHECK_INTERVAL,
     REMINDER_DAYS
 )
+
+# Импортируем CONFIG_EXPIRY_DAYS с дефолтным значением для обратной совместимости
+try:
+    from config import CONFIG_EXPIRY_DAYS
+except ImportError:
+    CONFIG_EXPIRY_DAYS = 31  # Дефолтное значение: 31 день
 
 # Настройка логирования
 logging.basicConfig(
