@@ -679,7 +679,7 @@ async def create_client(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def _create_client_for_inbound(update: Update, context: ContextTypes.DEFAULT_TYPE, 
-                                     user_id: int, inbound_id: int):
+                                     user_id: int, username: Optional[str], inbound_id: int):
     """Создать клиента для указанного inbound"""
     try:
         # Проверяем лимит еще раз
@@ -972,9 +972,9 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await query.edit_message_text(admin_text)
             return
         elif data.startswith("create_"):
-            # Создать клиента для inbound
+            # Создать клиента для inbound (старая логика, оставляем для совместимости)
             inbound_id = int(data.split("_")[1])
-            await _create_client_for_inbound(update, context, user_id, inbound_id)
+            await _create_client_for_inbound(update, context, user_id, username, inbound_id)
             
         elif data.startswith("clients_"):
             # Показать клиентов для inbound
