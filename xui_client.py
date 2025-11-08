@@ -23,64 +23,73 @@ class XUIClient:
     def _login(self) -> bool:
         """Авторизация в x-ui панели"""
         try:
-            login_url = f"{self.base_url}/panel/login"
-            logger.info(f"Попытка авторизации в x-ui: {login_url}")
+            # Пробуем оба варианта - /panel/panel/login и /panel/login
+            login_urls = [
+                f"{self.base_url}/panel/panel/login",
+                f"{self.base_url}/panel/login"
+            ]
             
-            response = self.session.post(
-                login_url,
-                json={
-                    "username": self.username,
-                    "password": self.password
-                },
-                timeout=10
-            )
+            for login_url in login_urls:
+                logger.info(f"Попытка авторизации в x-ui: {login_url}")
             
-            logger.info(f"Ответ авторизации: статус {response.status_code}")
-            
-            if response.status_code == 200:
-                try:
-                    data = response.json()
-                    logger.info(f"Ответ авторизации: {data}")
-                    
-                    if data.get("success"):
-                        # Токен может быть в cookies или в заголовках
-                        # Проверяем cookies
-                        cookies = response.cookies
-                        logger.info(f"Cookies получены: {len(cookies)} штук")
+                response = self.session.post(
+                    login_url,
+                    json={
+                        "username": self.username,
+                        "password": self.password
+                    },
+                    timeout=10
+                )
+                
+                logger.info(f"Ответ авторизации: статус {response.status_code}")
+                
+                if response.status_code == 200:
+                    try:
+                        data = response.json()
+                        logger.info(f"Ответ авторизации: {data}")
                         
-                        if cookies:
-                            # Ищем токен в cookies
-                            for cookie in cookies:
-                                logger.info(f"Cookie: {cookie.name} = {cookie.value[:20]}...")
-                                if 'token' in cookie.name.lower() or 'auth' in cookie.name.lower():
-                                    self.token = cookie.value
-                                    logger.info(f"Токен найден в cookie: {cookie.name}")
-                                    break
-                        
-                        # Если токен не найден в cookies, пробуем в JSON
-                        if not self.token:
-                            self.token = data.get("data", {}).get("token")
+                        if data.get("success"):
+                            # Токен может быть в cookies или в заголовках
+                            # Проверяем cookies
+                            cookies = response.cookies
+                            logger.info(f"Cookies получены: {len(cookies)} штук")
+                            
+                            if cookies:
+                                # Ищем токен в cookies
+                                for cookie in cookies:
+                                    logger.info(f"Cookie: {cookie.name} = {cookie.value[:20]}...")
+                                    if 'token' in cookie.name.lower() or 'auth' in cookie.name.lower():
+                                        self.token = cookie.value
+                                        logger.info(f"Токен найден в cookie: {cookie.name}")
+                                        break
+                            
+                            # Если токен не найден в cookies, пробуем в JSON
+                            if not self.token:
+                                self.token = data.get("data", {}).get("token")
+                                if self.token:
+                                    logger.info("Токен найден в JSON ответе")
+                            
+                            # Если токен найден, добавляем в заголовки
                             if self.token:
-                                logger.info("Токен найден в JSON ответе")
-                        
-                        # Если токен найден, добавляем в заголовки
-                        if self.token:
-                            self.session.headers.update({
-                                "Authorization": f"Bearer {self.token}"
-                            })
-                            logger.info("Токен добавлен в заголовки")
+                                self.session.headers.update({
+                                    "Authorization": f"Bearer {self.token}"
+                                })
+                                logger.info("Токен добавлен в заголовки")
+                            else:
+                                # Если токен не найден, используем cookies напрямую
+                                # x-ui может использовать cookie-based аутентификацию
+                                logger.info("Токен не найден, используем cookie-based аутентификацию")
+                            
+                            return True
                         else:
-                            # Если токен не найден, используем cookies напрямую
-                            # x-ui может использовать cookie-based аутентификацию
-                            logger.info("Токен не найден, используем cookie-based аутентификацию")
-                        
-                        return True
-                    else:
-                        logger.error(f"Авторизация не удалась: {data.get('msg', 'Unknown error')}")
-                except json.JSONDecodeError as e:
-                    logger.error(f"Ошибка парсинга JSON ответа: {e}, текст: {response.text[:200]}")
-            else:
-                logger.error(f"HTTP ошибка авторизации: {response.status_code}, текст: {response.text[:200]}")
+                            logger.warning(f"Авторизация не удалась для {login_url}: {data.get('msg', 'Unknown error')}")
+                    except json.JSONDecodeError as e:
+                        logger.warning(f"Ошибка парсинга JSON ответа для {login_url}: {e}, текст: {response.text[:200]}")
+                else:
+                    logger.warning(f"HTTP ошибка авторизации для {login_url}: {response.status_code}, текст: {response.text[:200]}")
+            
+            # Если все варианты не сработали
+            logger.error("Все варианты URL для авторизации не сработали")
             return False
         except Exception as e:
             logger.error(f"Ошибка авторизации: {e}", exc_info=True)
@@ -103,19 +112,19 @@ class XUIClient:
         
         try:
             # Пробуем разные варианты URL и методов
-            # x-ui может использовать разные пути и методы
+            # x-ui использует /panel/panel/... для API endpoints
             # Приоритет: сначала пробуем наиболее вероятные варианты
             url_methods = [
                 # POST запросы (x-ui часто использует POST для API)
-                (f"{self.base_url}/panel/inbound/list", "POST"),
-                (f"{self.base_url}/panel/api/inbound/list", "POST"),
-                (f"{self.base_url}/panel/inbounds/list", "POST"),
-                (f"{self.base_url}/panel/api/inbounds/list", "POST"),
+                (f"{self.base_url}/panel/panel/inbounds", "POST"),
+                (f"{self.base_url}/panel/panel/inbound/list", "POST"),
+                (f"{self.base_url}/panel/panel/api/inbounds", "POST"),
+                (f"{self.base_url}/panel/panel/api/inbound/list", "POST"),
                 # GET запросы
-                (f"{self.base_url}/panel/inbound/list", "GET"),
-                (f"{self.base_url}/panel/api/inbound/list", "GET"),
-                (f"{self.base_url}/panel/inbounds/list", "GET"),
-                (f"{self.base_url}/panel/api/inbounds/list", "GET"),
+                (f"{self.base_url}/panel/panel/inbounds", "GET"),
+                (f"{self.base_url}/panel/panel/inbound/list", "GET"),
+                (f"{self.base_url}/panel/panel/api/inbounds", "GET"),
+                (f"{self.base_url}/panel/panel/api/inbound/list", "GET"),
             ]
             
             for url, method in url_methods:
@@ -191,8 +200,9 @@ class XUIClient:
         try:
             # Пробуем разные варианты URL
             urls_to_try = [
-                f"{self.base_url}/xui/inbound/get/{inbound_id}",
+                f"{self.base_url}/panel/panel/inbound/get/{inbound_id}",
                 f"{self.base_url}/panel/inbound/get/{inbound_id}",
+                f"{self.base_url}/xui/inbound/get/{inbound_id}",
                 f"{self.base_url}/api/inbound/get/{inbound_id}",
                 f"{self.base_url}/inbound/get/{inbound_id}"
             ]
@@ -394,8 +404,9 @@ class XUIClient:
         
             # Определяем протокол из inbound - пробуем разные варианты URL
             urls_to_try = [
-                f"{self.base_url}/xui/inbound/get/{inbound_id}",
+                f"{self.base_url}/panel/panel/inbound/get/{inbound_id}",
                 f"{self.base_url}/panel/inbound/get/{inbound_id}",
+                f"{self.base_url}/xui/inbound/get/{inbound_id}",
                 f"{self.base_url}/api/inbound/get/{inbound_id}",
                 f"{self.base_url}/inbound/get/{inbound_id}"
             ]
@@ -435,8 +446,9 @@ class XUIClient:
             # Получаем текущий inbound
             # Получаем текущий inbound - пробуем разные варианты URL
             urls_to_try = [
-                f"{self.base_url}/xui/inbound/get/{inbound_id}",
+                f"{self.base_url}/panel/panel/inbound/get/{inbound_id}",
                 f"{self.base_url}/panel/inbound/get/{inbound_id}",
+                f"{self.base_url}/xui/inbound/get/{inbound_id}",
                 f"{self.base_url}/api/inbound/get/{inbound_id}",
                 f"{self.base_url}/inbound/get/{inbound_id}"
             ]
@@ -522,8 +534,9 @@ class XUIClient:
             
             # Обновляем inbound - пробуем разные варианты URL
             update_urls_to_try = [
-                f"{self.base_url}/xui/inbound/update/{inbound_id}",
+                f"{self.base_url}/panel/panel/inbound/update/{inbound_id}",
                 f"{self.base_url}/panel/inbound/update/{inbound_id}",
+                f"{self.base_url}/xui/inbound/update/{inbound_id}",
                 f"{self.base_url}/api/inbound/update/{inbound_id}",
                 f"{self.base_url}/inbound/update/{inbound_id}"
             ]
