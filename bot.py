@@ -351,6 +351,57 @@ async def list_users_command(update: Update, context: ContextTypes.DEFAULT_TYPE)
     await update.message.reply_text(text)
 
 
+async def clear_database_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Очистить всю базу данных (админ)"""
+    username = update.effective_user.username
+    
+    if not is_admin(username):
+        await update.message.reply_text("❌ У вас нет прав администратора.")
+        return
+    
+    try:
+        # Получаем соединение с базой данных
+        conn = db.get_connection()
+        cursor = conn.cursor()
+        
+        # Получаем список всех таблиц
+        cursor.execute("SELECT name FROM sqlite_master WHERE type='table';")
+        tables = cursor.fetchall()
+        
+        if not tables:
+            await update.message.reply_text("ℹ️ База данных пуста.")
+            conn.close()
+            return
+        
+        # Отключаем проверку внешних ключей для быстрой очистки
+        cursor.execute("PRAGMA foreign_keys = OFF;")
+        
+        # Очищаем каждую таблицу
+        cleared_tables = []
+        for table in tables:
+            table_name = table[0]
+            cursor.execute(f"DELETE FROM {table_name};")
+            cursor.execute(f"DELETE FROM sqlite_sequence WHERE name='{table_name}';")  # Сбрасываем автоинкремент
+            cleared_tables.append(table_name)
+        
+        # Включаем обратно проверку внешних ключей
+        cursor.execute("PRAGMA foreign_keys = ON;")
+        
+        conn.commit()
+        conn.close()
+        
+        result_text = f"✅ База данных успешно очищена!\n\n"
+        result_text += f"📋 Очищено таблиц: {len(cleared_tables)}\n"
+        for table_name in cleared_tables:
+            result_text += f"• {table_name}\n"
+        
+        await update.message.reply_text(result_text)
+        
+    except Exception as e:
+        logger.error(f"Ошибка при очистке базы данных: {e}", exc_info=True)
+        await update.message.reply_text(f"❌ Ошибка при очистке базы данных: {str(e)}")
+
+
 async def sync_reminders_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Синхронизировать напоминания из x-ui (админ)"""
     username = update.effective_user.username
