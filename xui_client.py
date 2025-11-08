@@ -233,26 +233,53 @@ class XUIClient:
             return []
         
         try:
-            # Пробуем разные варианты URL
+            # Пробуем разные варианты URL для 3x-ui
+            # Список inbounds работает через /panel/panel/api/inbounds/list
+            # Для получения конкретного inbound пробуем разные варианты
             urls_to_try = [
-                f"{self.base_url}/panel/panel/inbound/get/{inbound_id}",
-                f"{self.base_url}/panel/inbound/get/{inbound_id}",
-                f"{self.base_url}/xui/inbound/get/{inbound_id}",
-                f"{self.base_url}/api/inbound/get/{inbound_id}",
-                f"{self.base_url}/inbound/get/{inbound_id}"
+                # Варианты с /get/
+                (f"{self.base_url}/panel/panel/api/inbound/get/{inbound_id}", "GET"),
+                (f"{self.base_url}/panel/panel/api/inbound/get/{inbound_id}", "POST"),
+                (f"{self.base_url}/panel/api/inbound/get/{inbound_id}", "GET"),
+                (f"{self.base_url}/panel/api/inbound/get/{inbound_id}", "POST"),
+                (f"{self.base_url}/panel/panel/inbound/get/{inbound_id}", "GET"),
+                (f"{self.base_url}/panel/panel/inbound/get/{inbound_id}", "POST"),
+                (f"{self.base_url}/panel/inbound/get/{inbound_id}", "GET"),
+                (f"{self.base_url}/panel/inbound/get/{inbound_id}", "POST"),
+                # Варианты без /get/ (прямой доступ по ID)
+                (f"{self.base_url}/panel/panel/api/inbound/{inbound_id}", "GET"),
+                (f"{self.base_url}/panel/panel/api/inbound/{inbound_id}", "POST"),
+                (f"{self.base_url}/panel/api/inbound/{inbound_id}", "GET"),
+                (f"{self.base_url}/panel/api/inbound/{inbound_id}", "POST"),
+                # Старые варианты для совместимости
+                (f"{self.base_url}/xui/inbound/get/{inbound_id}", "GET"),
+                (f"{self.base_url}/api/inbound/get/{inbound_id}", "GET"),
+                (f"{self.base_url}/inbound/get/{inbound_id}", "GET"),
             ]
             
             response = None
-            for url in urls_to_try:
-                logger.info(f"Попытка запроса клиентов для inbound {inbound_id}: {url}")
-                test_response = self.session.get(url, timeout=10)
-                logger.info(f"Ответ получения клиентов: статус {test_response.status_code}")
-                
-                if test_response.status_code == 200:
-                    response = test_response
-                    break
-                else:
-                    logger.warning(f"HTTP ошибка для {url}: {test_response.status_code}")
+            for url, method in urls_to_try:
+                logger.info(f"Попытка запроса клиентов для inbound {inbound_id}: {method} {url}")
+                try:
+                    if method == "GET":
+                        test_response = self.session.get(url, timeout=10)
+                    else:
+                        test_response = self.session.post(url, json={}, timeout=10)
+                    
+                    logger.info(f"Ответ получения клиентов: статус {test_response.status_code}")
+                    
+                    if test_response.status_code == 200:
+                        # Проверяем, что это JSON, а не HTML
+                        content_type = test_response.headers.get('Content-Type', '').lower()
+                        if 'application/json' in content_type:
+                            response = test_response
+                            break
+                        else:
+                            logger.debug(f"Получен не-JSON ответ для {method} {url}, пробуем следующий вариант")
+                    else:
+                        logger.warning(f"HTTP ошибка для {method} {url}: {test_response.status_code}")
+                except Exception as e:
+                    logger.warning(f"Ошибка при запросе {method} {url}: {e}")
             
             if not response:
                 logger.error("Все варианты URL для получения клиентов не сработали")
