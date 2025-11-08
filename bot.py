@@ -415,12 +415,19 @@ async def list_inbounds(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 )
             )
         
-        if not keyboard:
+        if not keyboard or not any(keyboard):
             await loading_msg.edit_text("❌ Не удалось создать кнопки.")
             return
         
         reply_markup = InlineKeyboardMarkup(keyboard)
-        await loading_msg.edit_text(text, reply_markup=reply_markup)
+        total_buttons = sum(len(row) for row in keyboard)
+        logger.info(f"Отправляю список inbounds с {len(keyboard)} строками кнопок, всего {total_buttons} кнопок")
+        
+        try:
+            await loading_msg.edit_text(text, reply_markup=reply_markup)
+        except Exception as e:
+            logger.error(f"Ошибка при отправке сообщения с кнопками: {e}")
+            await loading_msg.edit_text(f"❌ Ошибка при отправке кнопок: {str(e)}")
         
     except Exception as e:
         logger.error(f"Ошибка в list_inbounds: {e}")
@@ -650,9 +657,21 @@ async def create_client(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
             return
         
+        if not keyboard or not any(keyboard):
+            await loading_msg.edit_text(
+                "❌ Не удалось создать кнопки для выбора сервера."
+            )
+            return
+        
         reply_markup = InlineKeyboardMarkup(keyboard)
-        logger.info(f"Отправляю сообщение с {len(keyboard)} строками кнопок, всего {sum(len(row) for row in keyboard)} кнопок")
-        await loading_msg.edit_text(text, reply_markup=reply_markup)
+        total_buttons = sum(len(row) for row in keyboard)
+        logger.info(f"Отправляю сообщение с {len(keyboard)} строками кнопок, всего {total_buttons} кнопок")
+        
+        try:
+            await loading_msg.edit_text(text, reply_markup=reply_markup)
+        except Exception as e:
+            logger.error(f"Ошибка при отправке сообщения с кнопками: {e}")
+            await loading_msg.edit_text(f"❌ Ошибка при отправке кнопок: {str(e)}")
         
     except Exception as e:
         logger.error(f"Ошибка в create_client: {e}")
@@ -827,8 +846,19 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     )
                 )
             
+            if not keyboard or not any(keyboard):
+                await query.edit_message_text("❌ Не удалось создать кнопки для клиентов.")
+                return
+            
             reply_markup = InlineKeyboardMarkup(keyboard)
-            await query.edit_message_text(text, reply_markup=reply_markup)
+            total_buttons = sum(len(row) for row in keyboard)
+            logger.info(f"Отправляю список клиентов с {len(keyboard)} строками кнопок, всего {total_buttons} кнопок")
+            
+            try:
+                await query.edit_message_text(text, reply_markup=reply_markup)
+            except Exception as e:
+                logger.error(f"Ошибка при отправке сообщения с кнопками: {e}")
+                await query.edit_message_text(f"❌ Ошибка при отправке кнопок: {str(e)}")
             
         elif data.startswith("get_"):
             # Получить конфигурацию
