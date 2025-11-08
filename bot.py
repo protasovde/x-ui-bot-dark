@@ -54,9 +54,14 @@ def is_admin(username: Optional[str]) -> bool:
         return False
     # Нормализуем username (убираем @ если есть)
     username_normalized = username.lstrip('@').lower()
-    if username_normalized in [u.lstrip('@').lower() for u in ADMIN_USERNAMES]:
+    
+    # Проверяем в списке администраторов из config
+    admin_list = [u.lstrip('@').lower() for u in ADMIN_USERNAMES]
+    if username_normalized in admin_list:
         return True
+    
     # Также проверяем в базе данных (для обратной совместимости)
+    # Но это не используется, так как проверка идет только по username из config
     return False
 
 

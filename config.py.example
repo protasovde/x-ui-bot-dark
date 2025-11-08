@@ -28,10 +28,15 @@ ALLOWED_USERNAMES: list[str] = [
 DEFAULT_INBOUND_ID: Optional[int] = None
 
 # Администраторы бота (Telegram username без @)
-ADMIN_USERNAMES: list[str] = [
-    "ImmoLateNeltharion",
-    "r00tfu11"
-]
+# Можно установить через переменную окружения ADMIN_USERNAMES (через запятую)
+admin_env = os.getenv("ADMIN_USERNAMES", "")
+if admin_env:
+    ADMIN_USERNAMES: list[str] = [u.strip() for u in admin_env.split(",") if u.strip()]
+else:
+    ADMIN_USERNAMES: list[str] = [
+        "ImmoLateNeltharion",
+        "r00tfu11"
+    ]
 
 # Интервал проверки напоминаний (в секундах)
 REMINDER_CHECK_INTERVAL: int = 3600  # 1 час
