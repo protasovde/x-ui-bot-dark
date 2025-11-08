@@ -1289,6 +1289,9 @@ def main():
     
     application.add_handler(CallbackQueryHandler(button_callback))
     
+    # Обработчик для кнопки "Меню" (Reply Keyboard)
+    application.add_handler(MessageHandler(filters.TEXT & filters.Regex("^Меню$"), start))
+    
     # Настраиваем периодическую проверку напоминаний (если JobQueue доступен)
     job_queue = application.job_queue
     if job_queue is not None:
