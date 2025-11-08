@@ -357,6 +357,10 @@ async def admin_help(update: Update, context: ContextTypes.DEFAULT_TYPE):
 Пример: /extend @username 31
 💡 Если days не указан, по умолчанию продлевается на 31 день
 
+/deleteuser <username> - Удалить все данные пользователя из базы данных
+Пример: /deleteuser @username
+⚠️ ВНИМАНИЕ: Удаляет все данные пользователя (конфиги, напоминания, пользователя)
+
 /users - Показать список всех пользователей
 
 /sync_reminders - Синхронизировать напоминания из x-ui
@@ -547,6 +551,39 @@ async def clear_database_command(update: Update, context: ContextTypes.DEFAULT_T
     except Exception as e:
         logger.error(f"Ошибка при очистке базы данных: {e}", exc_info=True)
         await update.message.reply_text(f"❌ Ошибка при очистке базы данных: {str(e)}")
+
+
+async def delete_user_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Удалить все данные пользователя из базы (админ)"""
+    username = update.effective_user.username
+    
+    if not is_admin(username):
+        await update.message.reply_text("❌ У вас нет прав администратора.")
+        return
+    
+    if len(context.args) < 1:
+        await update.message.reply_text(
+            "❌ Использование: /deleteuser <username>\n"
+            "Пример: /deleteuser @username\n"
+            "💡 Username можно указывать с @ или без него.\n"
+            "⚠️ ВНИМАНИЕ: Эта команда удалит ВСЕ данные пользователя из базы данных!"
+        )
+        return
+    
+    try:
+        target_username = context.args[0]
+        
+        # Удаляем данные пользователя
+        success, message, user_id = db.delete_user_data(target_username)
+        
+        if success:
+            await update.message.reply_text(message)
+        else:
+            await update.message.reply_text(f"❌ {message}")
+            
+    except Exception as e:
+        logger.error(f"Ошибка в delete_user_command: {e}", exc_info=True)
+        await update.message.reply_text(f"❌ Ошибка: {str(e)}")
 
 
 async def extend_config_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -1644,6 +1681,7 @@ def main():
     application.add_handler(CommandHandler("extend", extend_config_command))
     application.add_handler(CommandHandler("users", list_users_command))
     application.add_handler(CommandHandler("cleardb", clear_database_command))
+    application.add_handler(CommandHandler("deleteuser", delete_user_command))
     application.add_handler(CommandHandler("sync_reminders", sync_reminders_command))
     
     application.add_handler(CallbackQueryHandler(button_callback))

@@ -3,7 +3,7 @@
 """
 import sqlite3
 import logging
-from typing import Optional, Dict, List
+from typing import Optional, Dict, List, Tuple
 from datetime import datetime
 
 logger = logging.getLogger(__name__)
@@ -442,4 +442,53 @@ class Database:
                         conn.close()
         except Exception as e:
             logger.error(f"Ошибка синхронизации напоминаний: {e}")
+    
+    def delete_user_data(self, username: str) -> Tuple[bool, str, Optional[int]]:
+        """Удалить все данные пользователя по username
+        
+        Returns:
+            tuple: (success: bool, message: str, user_id: Optional[int])
+        """
+        try:
+            # Нормализуем username
+            normalized_username = username.lstrip('@').lower()
+            
+            # Находим пользователя
+            user = self.get_user_by_username(normalized_username)
+            if not user:
+                return False, f"Пользователь @{normalized_username} не найден в базе данных.", None
+            
+            user_id = user['user_id']
+            
+            conn = self.get_connection()
+            cursor = conn.cursor()
+            
+            # Подсчитываем количество записей перед удалением
+            cursor.execute("SELECT COUNT(*) FROM issued_configs WHERE user_id = ?", (user_id,))
+            configs_count = cursor.fetchone()[0]
+            
+            cursor.execute("SELECT COUNT(*) FROM reminders WHERE user_id = ?", (user_id,))
+            reminders_count = cursor.fetchone()[0]
+            
+            # Удаляем данные из всех таблиц
+            cursor.execute("DELETE FROM reminders WHERE user_id = ?", (user_id,))
+            cursor.execute("DELETE FROM issued_configs WHERE user_id = ?", (user_id,))
+            cursor.execute("DELETE FROM users WHERE user_id = ?", (user_id,))
+            
+            conn.commit()
+            conn.close()
+            
+            message = (
+                f"✅ Данные пользователя @{normalized_username} (ID: {user_id}) успешно удалены:\n"
+                f"• Удалено конфигов: {configs_count}\n"
+                f"• Удалено напоминаний: {reminders_count}\n"
+                f"• Удален пользователь из базы"
+            )
+            
+            logger.info(f"Удалены данные пользователя {normalized_username} (ID: {user_id})")
+            return True, message, user_id
+            
+        except Exception as e:
+            logger.error(f"Ошибка удаления данных пользователя: {e}", exc_info=True)
+            return False, f"Ошибка при удалении данных: {str(e)}", None
 
