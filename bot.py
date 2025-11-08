@@ -625,14 +625,24 @@ async def create_client(update: Update, context: ContextTypes.DEFAULT_TYPE):
             text += f"🔌 Протокол: {protocol.upper()}\n"
             text += f"🚪 Порт: {port}\n"
             text += "─" * 20 + "\n\n"
+        
+        # Добавляем кнопки для каждого inbound в одну строку (2 кнопки в ряд)
+        buttons_per_row = 2
+        for i, inbound in enumerate(inbounds):
+            inbound_id = inbound.get("id")
+            remark = inbound.get("remark", f"Inbound {inbound_id}")
+            
+            if i % buttons_per_row == 0:
+                # Начинаем новую строку
+                keyboard.append([])
             
             # Добавляем кнопку для создания клиента
-            keyboard.append([
+            keyboard[-1].append(
                 InlineKeyboardButton(
-                    f"✨ Создать клиента",
+                    f"✨ {remark[:15]}",
                     callback_data=f"create_{inbound_id}"
                 )
-            ])
+            )
         
         if not keyboard:
             await loading_msg.edit_text(
