@@ -397,11 +397,29 @@ class XUIClient:
         try:
             logger.info(f"Добавление клиента {email} к inbound {inbound_id}")
             # Получаем текущий inbound
-            url = f"{self.base_url}/panel/inbound/get/{inbound_id}"
-            logger.info(f"Запрос inbound {inbound_id}: {url}")
+            # Получаем текущий inbound - пробуем разные варианты URL
+            urls_to_try = [
+                f"{self.base_url}/xui/inbound/get/{inbound_id}",
+                f"{self.base_url}/panel/inbound/get/{inbound_id}",
+                f"{self.base_url}/api/inbound/get/{inbound_id}",
+                f"{self.base_url}/inbound/get/{inbound_id}"
+            ]
             
-            response = self.session.get(url, timeout=10)
-            logger.info(f"Ответ получения inbound: статус {response.status_code}")
+            response = None
+            for url in urls_to_try:
+                logger.info(f"Попытка запроса inbound {inbound_id}: {url}")
+                test_response = self.session.get(url, timeout=10)
+                logger.info(f"Ответ получения inbound: статус {test_response.status_code}")
+                
+                if test_response.status_code == 200:
+                    response = test_response
+                    break
+                else:
+                    logger.warning(f"HTTP ошибка для {url}: {test_response.status_code}")
+            
+            if not response:
+                logger.error("Все варианты URL для получения inbound не сработали")
+                return False
             
             if response.status_code != 200:
                 logger.error(f"HTTP ошибка получения inbound: {response.status_code}, текст: {response.text[:500]}")
