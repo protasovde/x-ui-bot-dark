@@ -27,11 +27,17 @@ from config import (
 # Импортируем новые переменные с дефолтными значениями для обратной совместимости
 try:
     from config import DEFAULT_INBOUND_ID
+    # Если DEFAULT_INBOUND_ID None или не установлен, используем дефолт
+    if DEFAULT_INBOUND_ID is None:
+        DEFAULT_INBOUND_ID = 7
 except ImportError:
     DEFAULT_INBOUND_ID = 7  # Дефолтное значение: inbound ID 7
 
 try:
     from config import CONFIG_EXPIRY_DAYS
+    # Если CONFIG_EXPIRY_DAYS не установлен, используем дефолт
+    if CONFIG_EXPIRY_DAYS is None:
+        CONFIG_EXPIRY_DAYS = 31
 except ImportError:
     CONFIG_EXPIRY_DAYS = 31  # Дефолтное значение: 31 день
 
