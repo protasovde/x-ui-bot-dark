@@ -553,28 +553,37 @@ class XUIClient:
                         pass
             
             # Теперь обрабатываем существующих клиентов
+            logger.info(f"Обработка {len(clients)} существующих клиентов для {base_username}")
             for client in clients:
                 client_email = client.get("email", "")
                 
                 # Пропускаем email, которые уже в excluded_emails (чтобы не дублировать)
                 if client_email in excluded_emails:
+                    logger.debug(f"Пропускаем клиента {client_email} - он в excluded_emails")
                     continue
                 
                 if client_email == base_username:
                     has_base_email = True
                     used_numbers.add(0)  # Базовый email считаем как номер 0
+                    logger.info(f"Найден базовый email {client_email} (номер 0)")
                 elif client_email.startswith(f"{base_username}_"):
                     # Извлекаем номер из email вида username_N
                     suffix = client_email[len(f"{base_username}_"):]
                     try:
                         number = int(suffix)
                         used_numbers.add(number)
+                        logger.info(f"Найден клиент {client_email} (номер {number})")
                     except ValueError:
                         # Если не число, игнорируем
+                        logger.warning(f"Не удалось извлечь номер из email {client_email}, suffix: {suffix}")
                         pass
+                else:
+                    # Логируем клиентов, которые не подходят под паттерн
+                    logger.debug(f"Клиент {client_email} не подходит под паттерн {base_username}_*")
             
             # Находим следующий доступный номер
             logger.info(f"Используемые номера для {base_username}: {sorted(used_numbers)}")
+            logger.info(f"Всего клиентов в inbound: {len(clients)}, клиентов с префиксом {base_username}: {len([c for c in clients if c.get('email', '').startswith(base_username)])}")
             
             # ВСЕГДА начинаем с номера 1 и ищем первый свободный
             # Это гарантирует, что мы не вернем номер из excluded_emails или существующих клиентов
@@ -582,16 +591,19 @@ class XUIClient:
             max_attempts = 1000  # Защита от бесконечного цикла
             attempts = 0
             
+            # Ищем первый свободный номер
             while next_number in used_numbers:
                 attempts += 1
                 if attempts > max_attempts:
                     logger.error(f"Превышено максимальное количество попыток поиска свободного номера для {base_username}")
                     break
-                logger.debug(f"Номер {next_number} занят (в used_numbers: {sorted(used_numbers)}), пробуем следующий...")
+                logger.info(f"Номер {next_number} занят (в used_numbers: {sorted(used_numbers)}), пробуем следующий...")
                 next_number += 1
             
-            # Дополнительная проверка: если полученный email в excluded_emails, продолжаем поиск
+            # Формируем email
             next_email = f"{base_username}_{next_number}"
+            
+            # Дополнительная проверка: если полученный email в excluded_emails, продолжаем поиск
             while next_email in excluded_emails:
                 logger.warning(f"Полученный email {next_email} находится в excluded_emails, продолжаем поиск...")
                 next_number += 1
@@ -600,7 +612,18 @@ class XUIClient:
                     logger.error(f"Превышено максимальное количество попыток для {base_username}")
                     break
             
-            logger.info(f"Следующий доступный email для {base_username}: {next_email} (исключено: {len(excluded_emails)} email, использованные номера: {sorted(used_numbers)})")
+            # Финальная проверка: убеждаемся, что email не существует в списке клиентов
+            # Это защита от race condition, когда клиент был создан между запросами
+            existing_emails = {c.get("email", "") for c in clients}
+            while next_email in existing_emails:
+                logger.warning(f"Полученный email {next_email} уже существует в списке клиентов, продолжаем поиск...")
+                next_number += 1
+                next_email = f"{base_username}_{next_number}"
+                if next_number > 1000:  # Защита от бесконечного цикла
+                    logger.error(f"Превышено максимальное количество попыток для {base_username}")
+                    break
+            
+            logger.info(f"✅ Следующий доступный email для {base_username}: {next_email} (исключено: {len(excluded_emails)} email, использованные номера: {sorted(used_numbers)})")
             return next_email
             
         except Exception as e:
