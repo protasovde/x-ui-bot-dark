@@ -19,13 +19,17 @@ from database import Database
 from config import (
     TELEGRAM_BOT_TOKEN, 
     ALLOWED_USERNAMES, 
-    DEFAULT_INBOUND_ID,
     ADMIN_USERNAMES,
     REMINDER_CHECK_INTERVAL,
     REMINDER_DAYS
 )
 
-# Импортируем CONFIG_EXPIRY_DAYS с дефолтным значением для обратной совместимости
+# Импортируем новые переменные с дефолтными значениями для обратной совместимости
+try:
+    from config import DEFAULT_INBOUND_ID
+except ImportError:
+    DEFAULT_INBOUND_ID = 7  # Дефолтное значение: inbound ID 7
+
 try:
     from config import CONFIG_EXPIRY_DAYS
 except ImportError:
