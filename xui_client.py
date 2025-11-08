@@ -515,25 +515,34 @@ class XUIClient:
             
             # Получаем существующих клиентов
             clients = settings.get("clients", [])
+            logger.info(f"Найдено клиентов в inbound {inbound_id}: {len(clients)}")
             
             # Находим все email, которые начинаются с base_username
             # Проверяем точное совпадение (username) и с номерами (username_1, username_2, ...)
             used_numbers = set()
             has_base_email = False
             
+            # Логируем клиентов с нужным префиксом
+            matching_clients = [c.get("email", "") for c in clients if c.get("email", "").startswith(base_username)]
+            if matching_clients:
+                logger.info(f"Найдены клиенты с префиксом {base_username}: {matching_clients}")
+            
             # Сначала обрабатываем excluded_emails - они должны быть исключены независимо от того,
             # существуют ли они в x-ui (например, если попытка создания не удалась)
+            logger.info(f"Обработка excluded_emails для {base_username}: {excluded_emails}")
             for excluded_email in excluded_emails:
                 if excluded_email == base_username:
                     has_base_email = True
                     used_numbers.add(0)
+                    logger.info(f"Исключен базовый email {excluded_email} (номер 0)")
                 elif excluded_email.startswith(f"{base_username}_"):
                     suffix = excluded_email[len(f"{base_username}_"):]
                     try:
                         number = int(suffix)
                         used_numbers.add(number)
-                        logger.debug(f"Исключен email {excluded_email} (номер {number}) из списка доступных")
+                        logger.info(f"Исключен email {excluded_email} (номер {number}) из списка доступных")
                     except ValueError:
+                        logger.warning(f"Не удалось извлечь номер из excluded_email: {excluded_email}")
                         pass
             
             # Теперь обрабатываем существующих клиентов
@@ -558,6 +567,7 @@ class XUIClient:
                         pass
             
             # Находим следующий доступный номер
+            logger.info(f"Используемые номера для {base_username}: {sorted(used_numbers)}")
             if not has_base_email and 0 not in used_numbers:
                 # Если базового email нет, используем его (но пользователь хочет с номерами, так что начинаем с 1)
                 # Но для совместимости, если есть старые конфиги без номера, пропускаем их
@@ -566,10 +576,11 @@ class XUIClient:
                 # Ищем минимальный свободный номер, начиная с 1
                 next_number = 1
                 while next_number in used_numbers:
+                    logger.debug(f"Номер {next_number} занят, пробуем следующий...")
                     next_number += 1
             
             next_email = f"{base_username}_{next_number}"
-            logger.info(f"Следующий доступный email для {base_username}: {next_email} (исключено: {len(excluded_emails)} email)")
+            logger.info(f"Следующий доступный email для {base_username}: {next_email} (исключено: {len(excluded_emails)} email, использованные номера: {sorted(used_numbers)})")
             return next_email
             
         except Exception as e:

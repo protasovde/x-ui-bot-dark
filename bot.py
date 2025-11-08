@@ -1080,11 +1080,13 @@ async def _create_client_for_inbound(update: Update, context: ContextTypes.DEFAU
         
         for attempt in range(max_attempts):
             # Получаем следующий доступный email, исключая уже попробованные
+            logger.info(f"Попытка {attempt + 1}/{max_attempts}: Исключаемые email: {attempted_emails}")
             email = xui_client.get_next_available_email(inbound_id, username, excluded_emails=attempted_emails)
-            logger.info(f"Попытка {attempt + 1}/{max_attempts}: Используется email {email} для пользователя {username}")
+            logger.info(f"Попытка {attempt + 1}/{max_attempts}: Получен email {email} для пользователя {username}")
             
             # Добавляем email в список попробованных
             attempted_emails.append(email)
+            logger.info(f"Попытка {attempt + 1}/{max_attempts}: Обновлен список attempted_emails: {attempted_emails}")
             
             # Пытаемся добавить клиента
             success = xui_client.add_client_to_inbound(inbound_id, email, expire_time=expire_time)
