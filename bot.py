@@ -588,6 +588,8 @@ async def create_client(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("⏳ Получаю список серверов...")
         inbounds = xui_client.get_inbounds()
         
+        logger.info(f"Получено inbounds: {len(inbounds) if inbounds else 0}")
+        
         if not inbounds:
             await update.message.reply_text(
                 "❌ Не удалось получить список inbounds или список пуст.\n"
@@ -618,7 +620,14 @@ async def create_client(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 )
             ])
         
+        if not keyboard:
+            await update.message.reply_text(
+                "❌ Не удалось создать кнопки для выбора сервера."
+            )
+            return
+        
         reply_markup = InlineKeyboardMarkup(keyboard)
+        logger.info(f"Отправляю сообщение с {len(keyboard)} кнопками")
         await update.message.reply_text(text, reply_markup=reply_markup)
         
     except Exception as e:
