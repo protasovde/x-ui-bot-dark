@@ -65,9 +65,13 @@ class XUIClient:
     
     def _ensure_authenticated(self):
         """Проверка и обновление токена при необходимости"""
+        # Проверяем, есть ли активная сессия (cookies)
         if not self.token:
+            # Пробуем авторизоваться
             if not self._login():
                 raise Exception("Не удалось авторизоваться в x-ui")
+        # Если токен не найден, но авторизация прошла успешно,
+        # значит используется cookie-based аутентификация
     
     def get_inbounds(self) -> List[Dict[str, Any]]:
         """Получить список всех inbounds"""

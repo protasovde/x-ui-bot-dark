@@ -573,25 +573,78 @@ async def create_client(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(f"❌ {message}")
         return
     
-    # Получаем inbound_id из аргументов или используем первый доступный
-    inbound_id = None
+    # Если указан inbound_id в аргументах, создаем сразу
     if context.args:
         try:
             inbound_id = int(context.args[0])
+            await _create_client_for_inbound(update, context, user_id, inbound_id)
+            return
         except ValueError:
             await update.message.reply_text("❌ ID inbound должен быть числом.")
             return
-    else:
-        # Используем первый доступный inbound
-        inbounds = xui_client.get_inbounds()
-        if inbounds:
-            inbound_id = inbounds[0].get("id")
-        else:
-            await update.message.reply_text("❌ Не найдено доступных inbounds.")
-            return
     
+    # Иначе показываем список inbounds с кнопками
     try:
-        await update.message.reply_text(f"⏳ Создаю нового клиента для inbound {inbound_id}...")
+        await update.message.reply_text("⏳ Получаю список серверов...")
+        inbounds = xui_client.get_inbounds()
+        
+        if not inbounds:
+            await update.message.reply_text(
+                "❌ Не удалось получить список inbounds или список пуст.\n"
+                "Проверьте подключение к x-ui панели."
+            )
+            return
+        
+        text = "📋 Выберите сервер для создания клиента:\n\n"
+        keyboard = []
+        
+        for inbound in inbounds:
+            inbound_id = inbound.get("id")
+            remark = inbound.get("remark", f"Inbound {inbound_id}")
+            protocol = inbound.get("protocol", "unknown")
+            port = inbound.get("port", "N/A")
+            
+            text += f"🆔 ID: {inbound_id}\n"
+            text += f"📝 Название: {remark}\n"
+            text += f"🔌 Протокол: {protocol.upper()}\n"
+            text += f"🚪 Порт: {port}\n"
+            text += "─" * 20 + "\n\n"
+            
+            # Добавляем кнопку для создания клиента
+            keyboard.append([
+                InlineKeyboardButton(
+                    f"✅ Создать клиента ({remark})",
+                    callback_data=f"create_{inbound_id}"
+                )
+            ])
+        
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        await update.message.reply_text(text, reply_markup=reply_markup)
+        
+    except Exception as e:
+        logger.error(f"Ошибка в create_client: {e}")
+        await update.message.reply_text(f"❌ Ошибка: {str(e)}")
+
+
+async def _create_client_for_inbound(update: Update, context: ContextTypes.DEFAULT_TYPE, 
+                                     user_id: int, inbound_id: int):
+    """Создать клиента для указанного inbound"""
+    try:
+        # Проверяем лимит еще раз
+        can_create, message = db.can_create_config(user_id)
+        if not can_create:
+            if hasattr(update, 'message') and update.message:
+                await update.message.reply_text(f"❌ {message}")
+            elif hasattr(update, 'callback_query'):
+                await update.callback_query.answer(f"❌ {message}", show_alert=True)
+            return
+        
+        # Показываем сообщение о создании
+        if hasattr(update, 'callback_query'):
+            await update.callback_query.answer("⏳ Создаю клиента...")
+            await update.callback_query.edit_message_text(f"⏳ Создаю нового клиента для inbound {inbound_id}...")
+        else:
+            await update.message.reply_text(f"⏳ Создаю нового клиента для inbound {inbound_id}...")
         
         # Генерируем email на основе user_id
         email = f"user_{user_id}@bot.local"
@@ -600,9 +653,11 @@ async def create_client(update: Update, context: ContextTypes.DEFAULT_TYPE):
         success = xui_client.add_client_to_inbound(inbound_id, email)
         
         if not success:
-            await update.message.reply_text(
-                f"❌ Не удалось создать клиента. Возможно, клиент с таким email уже существует."
-            )
+            error_msg = "❌ Не удалось создать клиента. Возможно, клиент с таким email уже существует."
+            if hasattr(update, 'callback_query'):
+                await update.callback_query.edit_message_text(error_msg)
+            else:
+                await update.message.reply_text(error_msg)
             return
         
         # Получаем конфигурацию
@@ -610,33 +665,47 @@ async def create_client(update: Update, context: ContextTypes.DEFAULT_TYPE):
         inbound = next((i for i in inbounds if i.get("id") == inbound_id), None)
         
         if not inbound:
-            await update.message.reply_text("❌ Не удалось получить информацию о inbound.")
+            error_msg = "❌ Не удалось получить информацию о inbound."
+            if hasattr(update, 'callback_query'):
+                await update.callback_query.edit_message_text(error_msg)
+            else:
+                await update.message.reply_text(error_msg)
             return
         
         protocol = inbound.get("protocol", "vless").lower()
         config = xui_client.get_client_config(inbound_id, email, protocol)
         
         if not config:
-            await update.message.reply_text(
+            error_msg = (
                 f"✅ Клиент создан, но не удалось получить конфигурацию.\n"
                 f"Email: {email}\n"
                 f"Inbound ID: {inbound_id}"
             )
+            if hasattr(update, 'callback_query'):
+                await update.callback_query.edit_message_text(error_msg)
+            else:
+                await update.message.reply_text(error_msg)
             return
         
         # Записываем выдачу конфига
         db.record_issued_config(user_id, email, inbound_id)
         
-        await update.message.reply_text(
+        # Отправляем результат
+        result_text = (
             f"✅ Клиент успешно создан!\n\n"
             f"📧 Email: {email}\n"
             f"🆔 Inbound ID: {inbound_id}\n\n"
-            f"Конфигурация:\n`{config}`",
-            parse_mode='Markdown'
+            f"Конфигурация:\n`{config}`"
         )
         
-        # Также отправляем как обычный текст
-        await update.message.reply_text(config)
+        if hasattr(update, 'callback_query'):
+            chat_id = update.callback_query.message.chat_id
+            await update.callback_query.edit_message_text(result_text, parse_mode='Markdown')
+            # Отправляем конфигурацию отдельным сообщением
+            await context.bot.send_message(chat_id=chat_id, text=config)
+        else:
+            await update.message.reply_text(result_text, parse_mode='Markdown')
+            await update.message.reply_text(config)
         
         # Обновляем информацию о лимите
         user = db.get_user(user_id)
@@ -644,13 +713,21 @@ async def create_client(update: Update, context: ContextTypes.DEFAULT_TYPE):
             limit = user.get("config_limit", 1)
             created = user.get("configs_created", 0)
             remaining = max(0, limit - created)
-            await update.message.reply_text(
-                f"📊 Осталось конфигов: {remaining}/{limit}"
-            )
+            limit_msg = f"📊 Осталось конфигов: {remaining}/{limit}"
+            
+            if hasattr(update, 'callback_query'):
+                chat_id = update.callback_query.message.chat_id
+                await context.bot.send_message(chat_id=chat_id, text=limit_msg)
+            else:
+                await update.message.reply_text(limit_msg)
         
     except Exception as e:
-        logger.error(f"Ошибка в create_client: {e}")
-        await update.message.reply_text(f"❌ Ошибка: {str(e)}")
+        logger.error(f"Ошибка в _create_client_for_inbound: {e}")
+        error_msg = f"❌ Ошибка: {str(e)}"
+        if hasattr(update, 'callback_query'):
+            await update.callback_query.edit_message_text(error_msg)
+        else:
+            await update.message.reply_text(error_msg)
 
 
 async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
