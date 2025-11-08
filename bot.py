@@ -1099,11 +1099,13 @@ async def _create_client_for_inbound(update: Update, context: ContextTypes.DEFAU
                 await asyncio.sleep(1.5)  # Увеличено с 0.5 до 1.5 секунд
         
         if not success:
+            attempted_list = ", ".join(attempted_emails) if attempted_emails else "нет"
             error_msg = (
                 f"❌ Не удалось создать клиента после {max_attempts} попыток.\n"
-                f"💡 Последний использованный email: {email}\n"
+                f"💡 Попробованные email: {attempted_list}\n"
                 f"💡 Возможно, все доступные номера заняты или произошла ошибка."
             )
+            logger.error(f"Не удалось создать клиента для {username} после {max_attempts} попыток. Попробованные email: {attempted_list}")
             if hasattr(update, 'callback_query'):
                 await update.callback_query.edit_message_text(error_msg)
             else:

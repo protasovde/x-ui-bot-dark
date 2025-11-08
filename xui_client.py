@@ -521,21 +521,27 @@ class XUIClient:
             used_numbers = set()
             has_base_email = False
             
+            # Сначала обрабатываем excluded_emails - они должны быть исключены независимо от того,
+            # существуют ли они в x-ui (например, если попытка создания не удалась)
+            for excluded_email in excluded_emails:
+                if excluded_email == base_username:
+                    has_base_email = True
+                    used_numbers.add(0)
+                elif excluded_email.startswith(f"{base_username}_"):
+                    suffix = excluded_email[len(f"{base_username}_"):]
+                    try:
+                        number = int(suffix)
+                        used_numbers.add(number)
+                        logger.debug(f"Исключен email {excluded_email} (номер {number}) из списка доступных")
+                    except ValueError:
+                        pass
+            
+            # Теперь обрабатываем существующих клиентов
             for client in clients:
                 client_email = client.get("email", "")
-                # Исключаем email, которые были переданы в excluded_emails
+                
+                # Пропускаем email, которые уже в excluded_emails (чтобы не дублировать)
                 if client_email in excluded_emails:
-                    # Если email в списке исключенных, считаем его занятым
-                    if client_email == base_username:
-                        has_base_email = True
-                        used_numbers.add(0)
-                    elif client_email.startswith(f"{base_username}_"):
-                        suffix = client_email[len(f"{base_username}_"):]
-                        try:
-                            number = int(suffix)
-                            used_numbers.add(number)
-                        except ValueError:
-                            pass
                     continue
                 
                 if client_email == base_username:
