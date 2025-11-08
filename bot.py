@@ -82,6 +82,33 @@ def is_admin(username: Optional[str]) -> bool:
     return False
 
 
+async def send_app_links(context: ContextTypes.DEFAULT_TYPE, chat_id: int):
+    """Отправить ссылки на приложения для iOS и Android"""
+    app_links_text = """
+📱 Приложения для подключения:
+
+🍎 iOS (App Store):
+• v2rayNG: https://apps.apple.com/app/v2rayng/id6446814690
+• Shadowrocket: https://apps.apple.com/app/shadowrocket/id932747118
+
+🤖 Android (Google Play):
+• v2rayNG: https://play.google.com/store/apps/details?id=com.v2ray.ang
+• v2rayNG (GitHub): https://github.com/2dust/v2rayNG/releases
+
+💡 Рекомендуется использовать v2rayNG для Android и iOS.
+"""
+    
+    try:
+        await context.bot.send_message(
+            chat_id=chat_id,
+            text=app_links_text,
+            parse_mode='HTML',
+            disable_web_page_preview=False
+        )
+    except Exception as e:
+        logger.error(f"Ошибка при отправке ссылок на приложения: {e}")
+
+
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Обработчик команды /start"""
     user_id = update.effective_user.id
@@ -865,9 +892,13 @@ async def _create_client_for_inbound(update: Update, context: ContextTypes.DEFAU
             await update.callback_query.edit_message_text(result_text)
             # Отправляем конфигурацию отдельным сообщением
             await context.bot.send_message(chat_id=chat_id, text=config)
+            # Отправляем ссылки на приложения
+            await send_app_links(context, chat_id)
         else:
             await update.message.reply_text(result_text)
             await update.message.reply_text(config)
+            # Отправляем ссылки на приложения
+            await send_app_links(context, update.message.chat_id)
         
         # Обновляем информацию о лимите
         user = db.get_user(user_id)
@@ -1001,6 +1032,8 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         chat_id=query.message.chat_id,
                         text=config
                     )
+                    # Отправляем ссылки на приложения
+                    await send_app_links(context, query.message.chat_id)
                 else:
                     await query.edit_message_text(
                         f"❌ Конфиг для {email} не найден.\n"

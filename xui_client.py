@@ -325,9 +325,52 @@ class XUIClient:
         # Формируем VLESS ссылку
         config = f"vless://{uuid}@{server}:{port}?type={network}&security={security}"
         
-        if network == "ws":
-            config += f"&host={host}&path={path}"
+        # Обработка Reality параметров
+        if security == "reality":
+            reality_settings = stream_settings.get("realitySettings", {})
+            reality_config = reality_settings.get("settings", {})
+            
+            # Public Key (pbk) - обязательный параметр для Reality
+            public_key = reality_config.get("publicKey", "")
+            if public_key:
+                config += f"&pbk={public_key}"
+            
+            # Fingerprint (fp) - отпечаток сертификата
+            fingerprint = reality_config.get("fingerprint", "chrome")
+            if fingerprint:
+                config += f"&fp={fingerprint}"
+            
+            # Server Name (sni) - имя сервера для TLS handshake
+            server_name = reality_config.get("serverName", "")
+            if not server_name:
+                # Если serverName не указан, используем первый из serverNames
+                server_names = reality_settings.get("serverNames", [])
+                if server_names:
+                    server_name = server_names[0]
+            
+            if server_name:
+                config += f"&sni={server_name}"
+            
+            # Short ID (sid) - короткий идентификатор
+            short_ids = reality_settings.get("shortIds", [])
+            if short_ids:
+                # Используем первый доступный shortId
+                short_id = short_ids[0] if isinstance(short_ids[0], str) else str(short_ids[0])
+                config += f"&sid={short_id}"
+            
+            # SpiderX (spx) - путь для обхода проверки
+            spider_x = reality_config.get("spiderX", "/")
+            if spider_x:
+                config += f"&spx={spider_x}"
         
+        # Обработка WebSocket параметров
+        if network == "ws":
+            if host:
+                config += f"&host={host}"
+            if path:
+                config += f"&path={path}"
+        
+        # Добавляем remark в конец
         config += f"#{remark}"
         
         return config
