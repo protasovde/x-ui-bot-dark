@@ -1102,11 +1102,11 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         if client and client.get("expireTime", 0) > 0:
                             db.add_reminder(user_id, email, inbound_id, client.get("expireTime"))
                         
-                           # Не используем Markdown для конфигурации, так как она содержит специальные символы
-                           await query.edit_message_text(
-                               f"✅ Конфигурация для {email}:\n\n"
-                               f"{config}"
-                           )
+                        # Не используем Markdown для конфигурации, так как она содержит специальные символы
+                        await query.edit_message_text(
+                            f"✅ Конфигурация для {email}:\n\n"
+                            f"{config}"
+                        )
                         
                         # Отправляем конфигурацию отдельным сообщением
                         await context.bot.send_message(
