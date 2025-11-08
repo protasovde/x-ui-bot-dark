@@ -469,6 +469,21 @@ class XUIClient:
             clients.append(new_client)
             settings["clients"] = clients
             
+            # Подготавливаем данные для обновления
+            update_data = {
+                "id": inbound_id,
+                "settings": json.dumps(settings),
+                "streamSettings": inbound.get("streamSettings", "{}"),
+                "sniffing": inbound.get("sniffing", "{}"),
+                "remark": inbound.get("remark", ""),
+                "protocol": inbound.get("protocol", ""),
+                "port": inbound.get("port", 0),
+                "listen": inbound.get("listen", ""),
+                "tag": inbound.get("tag", ""),
+                "up": inbound.get("up", 0),
+                "down": inbound.get("down", 0)
+            }
+            
             # Обновляем inbound - пробуем разные варианты URL
             update_urls_to_try = [
                 f"{self.base_url}/xui/inbound/update/{inbound_id}",
@@ -499,21 +514,6 @@ class XUIClient:
             if not update_response:
                 logger.error("Все варианты URL для обновления inbound не сработали")
                 return False
-            
-            # Подготавливаем данные для обновления
-            update_data = {
-                "id": inbound_id,
-                "settings": json.dumps(settings),
-                "streamSettings": inbound.get("streamSettings", "{}"),
-                "sniffing": inbound.get("sniffing", "{}"),
-                "remark": inbound.get("remark", ""),
-                "protocol": inbound.get("protocol", ""),
-                "port": inbound.get("port", 0),
-                "listen": inbound.get("listen", ""),
-                "tag": inbound.get("tag", ""),
-                "up": inbound.get("up", 0),
-                "down": inbound.get("down", 0)
-            }
             
             logger.info(f"Обновление inbound {inbound_id}: {update_url}")
             
