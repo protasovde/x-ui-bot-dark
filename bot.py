@@ -754,20 +754,21 @@ async def _create_client_for_inbound(update: Update, context: ContextTypes.DEFAU
         db.record_issued_config(user_id, email, inbound_id)
         
         # Отправляем результат
+        # Не используем Markdown для конфигурации, так как она содержит специальные символы
         result_text = (
             f"✅ Клиент успешно создан!\n\n"
             f"📧 Email: {email}\n"
             f"🆔 Inbound ID: {inbound_id}\n\n"
-            f"Конфигурация:\n`{config}`"
+            f"Конфигурация:"
         )
         
         if hasattr(update, 'callback_query'):
             chat_id = update.callback_query.message.chat_id
-            await update.callback_query.edit_message_text(result_text, parse_mode='Markdown')
+            await update.callback_query.edit_message_text(result_text)
             # Отправляем конфигурацию отдельным сообщением
             await context.bot.send_message(chat_id=chat_id, text=config)
         else:
-            await update.message.reply_text(result_text, parse_mode='Markdown')
+            await update.message.reply_text(result_text)
             await update.message.reply_text(config)
         
         # Обновляем информацию о лимите
@@ -1101,11 +1102,11 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         if client and client.get("expireTime", 0) > 0:
                             db.add_reminder(user_id, email, inbound_id, client.get("expireTime"))
                         
-                        await query.edit_message_text(
-                            f"✅ Конфигурация для {email}:\n\n"
-                            f"`{config}`",
-                            parse_mode='Markdown'
-                        )
+                           # Не используем Markdown для конфигурации, так как она содержит специальные символы
+                           await query.edit_message_text(
+                               f"✅ Конфигурация для {email}:\n\n"
+                               f"{config}"
+                           )
                         
                         # Отправляем конфигурацию отдельным сообщением
                         await context.bot.send_message(

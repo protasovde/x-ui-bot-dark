@@ -157,10 +157,15 @@ class Database:
             logger.error(f"Ошибка установки лимита: {e}")
             return False
     
-    def increment_configs_created(self, user_id: int) -> bool:
+    def increment_configs_created(self, user_id: int, conn=None) -> bool:
         """Увеличить счетчик созданных конфигов"""
         try:
-            conn = self.get_connection()
+            # Если передано соединение, используем его, иначе создаем новое
+            should_close = False
+            if conn is None:
+                conn = self.get_connection()
+                should_close = True
+            
             cursor = conn.cursor()
             
             cursor.execute("""
@@ -168,9 +173,28 @@ class Database:
                 WHERE user_id = ?
             """, (user_id,))
             
-            conn.commit()
-            conn.close()
+            if should_close:
+                conn.commit()
+                conn.close()
             return True
+        except sqlite3.OperationalError as e:
+            if "locked" in str(e).lower():
+                # Если база заблокирована, пробуем еще раз с небольшой задержкой
+                import time
+                time.sleep(0.1)
+                if conn is None:
+                    conn = self.get_connection()
+                cursor = conn.cursor()
+                cursor.execute("""
+                    UPDATE users SET configs_created = configs_created + 1 
+                    WHERE user_id = ?
+                """, (user_id,))
+                if should_close or conn is None:
+                    conn.commit()
+                    conn.close()
+                return True
+            logger.error(f"Ошибка увеличения счетчика: {e}")
+            return False
         except Exception as e:
             logger.error(f"Ошибка увеличения счетчика: {e}")
             return False
@@ -233,11 +257,33 @@ class Database:
                 VALUES (?, ?, ?)
             """, (user_id, email, inbound_id))
             
-            self.increment_configs_created(user_id)
+            # Используем то же соединение для увеличения счетчика
+            self.increment_configs_created(user_id, conn)
             
             conn.commit()
             conn.close()
             return True
+        except sqlite3.OperationalError as e:
+            if "locked" in str(e).lower():
+                # Если база заблокирована, пробуем еще раз с небольшой задержкой
+                import time
+                time.sleep(0.2)
+                try:
+                    conn = self.get_connection()
+                    cursor = conn.cursor()
+                    cursor.execute("""
+                        INSERT INTO issued_configs (user_id, email, inbound_id)
+                        VALUES (?, ?, ?)
+                    """, (user_id, email, inbound_id))
+                    self.increment_configs_created(user_id, conn)
+                    conn.commit()
+                    conn.close()
+                    return True
+                except Exception as retry_e:
+                    logger.error(f"Ошибка записи конфига при повторной попытке: {retry_e}")
+                    return False
+            logger.error(f"Ошибка записи конфига: {e}")
+            return False
         except Exception as e:
             logger.error(f"Ошибка записи конфига: {e}")
             return False
