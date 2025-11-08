@@ -108,7 +108,20 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if is_admin(username):
         welcome_text += "\n🔧 Админские команды:\n/adminhelp - Справка по админским командам"
     
-    await update.message.reply_text(welcome_text)
+    # Добавляем кнопки для быстрого доступа
+    keyboard = [
+        [
+            InlineKeyboardButton("✨ Создать клиента", callback_data="create_menu"),
+            InlineKeyboardButton("📋 Список серверов", callback_data="list_menu")
+        ],
+        [
+            InlineKeyboardButton("📊 Моя информация", callback_data="myinfo_menu"),
+            InlineKeyboardButton("❓ Помощь", callback_data="help_menu")
+        ]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    
+    await update.message.reply_text(welcome_text, reply_markup=reply_markup)
 
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -791,7 +804,33 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     data = query.data
     
     try:
-        if data.startswith("create_"):
+        # Обработка кнопок меню
+        if data == "create_menu":
+            await query.answer("Открываю меню создания клиента...")
+            # Вызываем функцию create_client
+            fake_update = Update(update_id=update.update_id, message=None, callback_query=query)
+            fake_context = context
+            await create_client(fake_update, fake_context)
+            return
+        elif data == "list_menu":
+            await query.answer("Открываю список серверов...")
+            fake_update = Update(update_id=update.update_id, message=None, callback_query=query)
+            fake_context = context
+            await list_inbounds(fake_update, fake_context)
+            return
+        elif data == "myinfo_menu":
+            await query.answer("Показываю информацию...")
+            fake_update = Update(update_id=update.update_id, message=None, callback_query=query)
+            fake_context = context
+            await myinfo_command(fake_update, fake_context)
+            return
+        elif data == "help_menu":
+            await query.answer("Показываю справку...")
+            fake_update = Update(update_id=update.update_id, message=None, callback_query=query)
+            fake_context = context
+            await help_command(fake_update, fake_context)
+            return
+        elif data.startswith("create_"):
             # Создать клиента для inbound
             inbound_id = int(data.split("_")[1])
             await _create_client_for_inbound(update, context, user_id, inbound_id)
