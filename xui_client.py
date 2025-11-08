@@ -133,34 +133,50 @@ class XUIClient:
     
     def get_inbound_clients(self, inbound_id: int) -> List[Dict[str, Any]]:
         """Получить список клиентов для конкретного inbound"""
-        self._ensure_authenticated()
+        try:
+            self._ensure_authenticated()
+        except Exception as e:
+            logger.error(f"Ошибка авторизации: {e}")
+            return []
         
         try:
             url = f"{self.base_url}/panel/inbound/get/{inbound_id}"
+            logger.info(f"Запрос клиентов для inbound {inbound_id}: {url}")
+            
             response = self.session.get(url, timeout=10)
+            logger.info(f"Ответ получения клиентов: статус {response.status_code}")
             
             if response.status_code == 200:
-                data = response.json()
-                if data.get("success"):
-                    inbound = data.get("obj", {})
-                    
-                    # Клиенты могут быть в поле "clients" или в "settings" как JSON строка
-                    clients = inbound.get("clients", [])
-                    
-                    # Если клиентов нет, пробуем извлечь из settings
-                    if not clients:
-                        settings_str = inbound.get("settings", "")
-                        if settings_str:
-                            try:
-                                settings = json.loads(settings_str)
-                                clients = settings.get("clients", [])
-                            except:
-                                pass
-                    
-                    return clients if clients else []
+                try:
+                    data = response.json()
+                    if data.get("success"):
+                        inbound = data.get("obj", {})
+                        
+                        # Клиенты могут быть в поле "clients" или в "settings" как JSON строка
+                        clients = inbound.get("clients", [])
+                        
+                        # Если клиентов нет, пробуем извлечь из settings
+                        if not clients:
+                            settings_str = inbound.get("settings", "")
+                            if settings_str:
+                                try:
+                                    settings = json.loads(settings_str)
+                                    clients = settings.get("clients", [])
+                                    logger.info(f"Клиенты найдены в settings: {len(clients)}")
+                                except json.JSONDecodeError as e:
+                                    logger.error(f"Ошибка парсинга settings: {e}")
+                        
+                        logger.info(f"Получено клиентов: {len(clients) if clients else 0}")
+                        return clients if clients else []
+                    else:
+                        logger.error(f"Ошибка API: {data.get('msg', 'Unknown error')}")
+                except json.JSONDecodeError as e:
+                    logger.error(f"Ошибка парсинга JSON: {e}, текст: {response.text[:500]}")
+            else:
+                logger.error(f"HTTP ошибка: {response.status_code}, ответ: {response.text[:500]}")
             return []
         except Exception as e:
-            print(f"Ошибка получения клиентов: {e}")
+            logger.error(f"Ошибка получения клиентов: {e}", exc_info=True)
             return []
     
     def get_client_config(self, inbound_id: int, email: str, protocol: str = "vless") -> Optional[str]:
@@ -316,18 +332,33 @@ class XUIClient:
                               expire_time: Optional[int] = None,
                               total_traffic: Optional[int] = None) -> bool:
         """Добавить клиента к inbound"""
-        self._ensure_authenticated()
+        try:
+            self._ensure_authenticated()
+        except Exception as e:
+            logger.error(f"Ошибка авторизации: {e}")
+            return False
         
         try:
+            logger.info(f"Добавление клиента {email} к inbound {inbound_id}")
             # Получаем текущий inbound
             url = f"{self.base_url}/panel/inbound/get/{inbound_id}"
+            logger.info(f"Запрос inbound {inbound_id}: {url}")
+            
             response = self.session.get(url, timeout=10)
+            logger.info(f"Ответ получения inbound: статус {response.status_code}")
             
             if response.status_code != 200:
+                logger.error(f"HTTP ошибка получения inbound: {response.status_code}, текст: {response.text[:500]}")
                 return False
             
-            data = response.json()
+            try:
+                data = response.json()
+            except json.JSONDecodeError as e:
+                logger.error(f"Ошибка парсинга JSON: {e}, текст: {response.text[:500]}")
+                return False
+            
             if not data.get("success"):
+                logger.error(f"Ошибка API: {data.get('msg', 'Unknown error')}")
                 return False
             
             inbound = data.get("obj", {})
@@ -366,6 +397,8 @@ class XUIClient:
             
             # Обновляем inbound
             update_url = f"{self.base_url}/panel/inbound/update/{inbound_id}"
+            logger.info(f"Обновление inbound {inbound_id}: {update_url}")
+            
             update_data = {
                 "id": inbound_id,
                 "settings": json.dumps(settings),
@@ -386,12 +419,24 @@ class XUIClient:
                 timeout=10
             )
             
+            logger.info(f"Ответ обновления inbound: статус {update_response.status_code}")
+            
             if update_response.status_code == 200:
-                update_data = update_response.json()
-                return update_data.get("success", False)
+                try:
+                    update_result = update_response.json()
+                    success = update_result.get("success", False)
+                    if success:
+                        logger.info(f"Клиент {email} успешно добавлен к inbound {inbound_id}")
+                    else:
+                        logger.error(f"Ошибка обновления inbound: {update_result.get('msg', 'Unknown error')}")
+                    return success
+                except json.JSONDecodeError as e:
+                    logger.error(f"Ошибка парсинга JSON ответа: {e}, текст: {update_response.text[:500]}")
+            else:
+                logger.error(f"HTTP ошибка обновления inbound: {update_response.status_code}, текст: {update_response.text[:500]}")
             
             return False
         except Exception as e:
-            print(f"Ошибка добавления клиента: {e}")
+            logger.error(f"Ошибка добавления клиента: {e}", exc_info=True)
             return False
 
