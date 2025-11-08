@@ -3,8 +3,11 @@
 """
 import requests
 import json
+import logging
 from typing import Optional, Dict, List, Any
 from config import XUI_BASE_URL, XUI_USERNAME, XUI_PASSWORD
+
+logger = logging.getLogger(__name__)
 
 
 class XUIClient:
@@ -21,6 +24,8 @@ class XUIClient:
         """Авторизация в x-ui панели"""
         try:
             login_url = f"{self.base_url}/panel/login"
+            logger.info(f"Попытка авторизации в x-ui: {login_url}")
+            
             response = self.session.post(
                 login_url,
                 json={
@@ -30,73 +35,100 @@ class XUIClient:
                 timeout=10
             )
             
+            logger.info(f"Ответ авторизации: статус {response.status_code}")
+            
             if response.status_code == 200:
-                data = response.json()
-                if data.get("success"):
-                    # Токен может быть в cookies или в заголовках
-                    # Проверяем cookies
-                    cookies = response.cookies
-                    if cookies:
-                        # Ищем токен в cookies
-                        for cookie in cookies:
-                            if 'token' in cookie.name.lower() or 'auth' in cookie.name.lower():
-                                self.token = cookie.value
-                                break
+                try:
+                    data = response.json()
+                    logger.info(f"Ответ авторизации: {data}")
                     
-                    # Если токен не найден в cookies, пробуем в JSON
-                    if not self.token:
-                        self.token = data.get("data", {}).get("token")
-                    
-                    # Если токен найден, добавляем в заголовки
-                    if self.token:
-                        self.session.headers.update({
-                            "Authorization": f"Bearer {self.token}"
-                        })
+                    if data.get("success"):
+                        # Токен может быть в cookies или в заголовках
+                        # Проверяем cookies
+                        cookies = response.cookies
+                        logger.info(f"Cookies получены: {len(cookies)} штук")
+                        
+                        if cookies:
+                            # Ищем токен в cookies
+                            for cookie in cookies:
+                                logger.info(f"Cookie: {cookie.name} = {cookie.value[:20]}...")
+                                if 'token' in cookie.name.lower() or 'auth' in cookie.name.lower():
+                                    self.token = cookie.value
+                                    logger.info(f"Токен найден в cookie: {cookie.name}")
+                                    break
+                        
+                        # Если токен не найден в cookies, пробуем в JSON
+                        if not self.token:
+                            self.token = data.get("data", {}).get("token")
+                            if self.token:
+                                logger.info("Токен найден в JSON ответе")
+                        
+                        # Если токен найден, добавляем в заголовки
+                        if self.token:
+                            self.session.headers.update({
+                                "Authorization": f"Bearer {self.token}"
+                            })
+                            logger.info("Токен добавлен в заголовки")
+                        else:
+                            # Если токен не найден, используем cookies напрямую
+                            # x-ui может использовать cookie-based аутентификацию
+                            logger.info("Токен не найден, используем cookie-based аутентификацию")
+                        
+                        return True
                     else:
-                        # Если токен не найден, используем cookies напрямую
-                        # x-ui может использовать cookie-based аутентификацию
-                        pass
-                    
-                    return True
+                        logger.error(f"Авторизация не удалась: {data.get('msg', 'Unknown error')}")
+                except json.JSONDecodeError as e:
+                    logger.error(f"Ошибка парсинга JSON ответа: {e}, текст: {response.text[:200]}")
+            else:
+                logger.error(f"HTTP ошибка авторизации: {response.status_code}, текст: {response.text[:200]}")
             return False
         except Exception as e:
-            print(f"Ошибка авторизации: {e}")
+            logger.error(f"Ошибка авторизации: {e}", exc_info=True)
             return False
     
     def _ensure_authenticated(self):
         """Проверка и обновление токена при необходимости"""
-        # Проверяем, есть ли активная сессия (cookies)
-        if not self.token:
-            # Пробуем авторизоваться
-            if not self._login():
-                raise Exception("Не удалось авторизоваться в x-ui")
-        # Если токен не найден, но авторизация прошла успешно,
-        # значит используется cookie-based аутентификация
+        # Всегда переавторизуемся для надежности
+        # x-ui может использовать cookie-based аутентификацию, которая работает через сессию
+        if not self._login():
+            raise Exception("Не удалось авторизоваться в x-ui")
     
     def get_inbounds(self) -> List[Dict[str, Any]]:
         """Получить список всех inbounds"""
         try:
             self._ensure_authenticated()
         except Exception as e:
-            print(f"Ошибка авторизации: {e}")
+            logger.error(f"Ошибка авторизации: {e}")
             return []
         
         try:
             url = f"{self.base_url}/panel/inbound/list"
+            logger.info(f"Запрос списка inbounds: {url}")
+            
             response = self.session.get(url, timeout=10)
+            logger.info(f"Ответ получения inbounds: статус {response.status_code}")
             
             if response.status_code == 200:
-                data = response.json()
-                if data.get("success"):
-                    inbounds = data.get("obj", [])
-                    return inbounds if inbounds else []
-                else:
-                    print(f"Ошибка API: {data.get('msg', 'Unknown error')}")
+                try:
+                    data = response.json()
+                    logger.info(f"Ответ API: success={data.get('success')}, obj type={type(data.get('obj'))}")
+                    
+                    if data.get("success"):
+                        inbounds = data.get("obj", [])
+                        logger.info(f"Получено inbounds: {len(inbounds) if inbounds else 0}")
+                        if inbounds:
+                            logger.info(f"Первый inbound: {inbounds[0] if inbounds else 'None'}")
+                        return inbounds if inbounds else []
+                    else:
+                        error_msg = data.get('msg', 'Unknown error')
+                        logger.error(f"Ошибка API: {error_msg}")
+                except json.JSONDecodeError as e:
+                    logger.error(f"Ошибка парсинга JSON: {e}, текст: {response.text[:500]}")
             else:
-                print(f"HTTP ошибка: {response.status_code}, ответ: {response.text[:200]}")
+                logger.error(f"HTTP ошибка: {response.status_code}, ответ: {response.text[:500]}")
             return []
         except Exception as e:
-            print(f"Ошибка получения inbounds: {e}")
+            logger.error(f"Ошибка получения inbounds: {e}", exc_info=True)
             return []
     
     def get_inbound_clients(self, inbound_id: int) -> List[Dict[str, Any]]:
