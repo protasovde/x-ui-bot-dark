@@ -852,37 +852,58 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return
         elif data == "download_config":
             await query.answer("Получаю ваш конфиг...")
-            # Получаем конфиги пользователя
-            user_configs = db.get_user_configs(user_id)
-            if not user_configs:
+            
+            # Проверяем наличие username
+            if not username:
                 await query.edit_message_text(
-                    "❌ У вас нет созданных конфигов.\n"
-                    "Используйте кнопку '✨ Создать клиента' для создания нового конфига."
+                    "❌ У вас не установлен username в настройках Telegram.\n"
+                    "💡 Установите username в настройках Telegram для получения конфига."
                 )
                 return
             
-            text = "📋 Ваши конфиги:\n\n"
-            keyboard = []
+            # Получаем конфиг по username (email = username)
+            email = username
+            inbound_id = DEFAULT_INBOUND_ID
             
-            for config in user_configs:
-                email = config.get("email", "N/A")
-                inbound_id = config.get("inbound_id", 0)
-                text += f"📧 Email: {email}\n"
-                text += f"🆔 Inbound ID: {inbound_id}\n"
-                text += "─" * 20 + "\n\n"
+            await query.edit_message_text("⏳ Получаю конфигурацию...")
+            
+            # Получаем протокол из inbound
+            inbounds = xui_client.get_inbounds()
+            inbound = next((i for i in inbounds if i.get("id") == inbound_id), None)
+            
+            if inbound:
+                protocol = inbound.get("protocol", "vless").lower()
+                config = xui_client.get_client_config(inbound_id, email, protocol)
                 
-                keyboard.append([
-                    InlineKeyboardButton(
-                        f"📥 Получить {email}",
-                        callback_data=f"get_{inbound_id}_{email}"
+                if config:
+                    # Записываем выдачу конфига
+                    db.record_issued_config(user_id, email, inbound_id)
+                    
+                    # Получаем информацию о клиенте для напоминаний
+                    clients = xui_client.get_inbound_clients(inbound_id)
+                    client = next((c for c in clients if c.get("email") == email), None)
+                    
+                    if client and client.get("expireTime", 0) > 0:
+                        db.add_reminder(user_id, email, inbound_id, client.get("expireTime"))
+                    
+                    # Не используем Markdown для конфигурации, так как она содержит специальные символы
+                    await query.edit_message_text(
+                        f"✅ Конфигурация для {email}:\n\n"
+                        f"{config}"
                     )
-                ])
-            
-            if keyboard:
-                reply_markup = InlineKeyboardMarkup(keyboard)
-                await query.edit_message_text(text, reply_markup=reply_markup)
+                    
+                    # Отправляем конфигурацию отдельным сообщением
+                    await context.bot.send_message(
+                        chat_id=query.message.chat_id,
+                        text=config
+                    )
+                else:
+                    await query.edit_message_text(
+                        f"❌ Конфиг для {email} не найден.\n"
+                        "💡 Используйте кнопку '✨ Создать конфиг' для создания нового конфига."
+                    )
             else:
-                await query.edit_message_text(text)
+                await query.edit_message_text("❌ Не удалось получить информацию о сервере.")
             return
         elif data == "config_info":
             await query.answer("Показываю информацию о конфиге...")
