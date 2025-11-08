@@ -33,6 +33,7 @@ SSH_COMMANDS.md
 deploy.py
 test_api.py
 deploy_remote.py
+update_config.py
 *.py
 !bot.py
 !database.py
