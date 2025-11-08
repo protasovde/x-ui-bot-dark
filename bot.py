@@ -603,8 +603,8 @@ async def create_client(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # Если указан inbound_id в аргументах, создаем сразу
     if context.args:
         try:
-            inbound_id = int(context.args[0])
-            await _create_client_for_inbound(update, context, user_id, inbound_id)
+            inbound_id = int(context.args[0]) if context.args else DEFAULT_INBOUND_ID
+            await _create_client_for_inbound(update, context, user_id, username, inbound_id)
             return
         except ValueError:
             await update.message.reply_text("❌ ID inbound должен быть числом.")
