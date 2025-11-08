@@ -745,7 +745,12 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     data = query.data
     
     try:
-        if data.startswith("clients_"):
+        if data.startswith("create_"):
+            # Создать клиента для inbound
+            inbound_id = int(data.split("_")[1])
+            await _create_client_for_inbound(update, context, user_id, inbound_id)
+            
+        elif data.startswith("clients_"):
             # Показать клиентов для inbound
             inbound_id = int(data.split("_")[1])
             
