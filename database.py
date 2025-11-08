@@ -128,7 +128,16 @@ class Database:
             conn = self.get_connection()
             cursor = conn.cursor()
             
-            cursor.execute("SELECT * FROM users WHERE username = ?", (username,))
+            # Нормализуем username (убираем @ и приводим к нижнему регистру)
+            normalized_username = username.lstrip('@').lower()
+            
+            # Ищем пользователя с учетом нормализации
+            # Проверяем оба варианта: с @ и без, в разном регистре
+            # Используем REPLACE для удаления @ и LOWER для приведения к нижнему регистру
+            cursor.execute("""
+                SELECT * FROM users 
+                WHERE LOWER(REPLACE(username, '@', '')) = ?
+            """, (normalized_username,))
             row = cursor.fetchone()
             conn.close()
             
