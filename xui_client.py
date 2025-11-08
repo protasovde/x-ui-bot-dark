@@ -381,45 +381,43 @@ class XUIClient:
     
     def get_client_config_by_email(self, email: str, inbound_id: Optional[int] = None) -> Optional[str]:
         """Получить конфигурацию клиента по email"""
-        if inbound_id is None:
-            # Ищем во всех inbounds
+        try:
+            self._ensure_authenticated()
+        except Exception as e:
+            logger.error(f"Ошибка авторизации: {e}")
+            return None
+        
+        try:
+            # Используем данные из списка inbounds - там уже есть вся информация
+            # Источники: https://github.com/MHSanaei/3x-ui
             inbounds = self.get_inbounds()
-            for inbound in inbounds:
-                clients = self.get_inbound_clients(inbound.get("id"))
-                if any(c.get("email") == email for c in clients):
-                    inbound_id = inbound.get("id")
-                    break
             
             if inbound_id is None:
-                return None
-        
-            # Определяем протокол из inbound - пробуем разные варианты URL
-            urls_to_try = [
-                f"{self.base_url}/panel/panel/inbound/get/{inbound_id}",
-                f"{self.base_url}/panel/inbound/get/{inbound_id}",
-                f"{self.base_url}/xui/inbound/get/{inbound_id}",
-                f"{self.base_url}/api/inbound/get/{inbound_id}",
-                f"{self.base_url}/inbound/get/{inbound_id}"
-            ]
+                # Ищем во всех inbounds
+                for inbound in inbounds:
+                    settings_str = inbound.get("settings", "{}")
+                    settings = json.loads(settings_str) if settings_str else {}
+                    clients = settings.get("clients", [])
+                    if any(c.get("email") == email for c in clients):
+                        inbound_id = inbound.get("id")
+                        break
+                
+                if inbound_id is None:
+                    logger.warning(f"Клиент с email {email} не найден ни в одном inbound")
+                    return None
             
-            response = None
-            for url in urls_to_try:
-                test_response = self.session.get(url, timeout=10)
-                if test_response.status_code == 200:
-                    response = test_response
-                    break
-            
-            if not response:
+            # Находим inbound по ID
+            inbound = next((i for i in inbounds if i.get("id") == inbound_id), None)
+            if not inbound:
+                logger.error(f"Inbound {inbound_id} не найден в списке")
                 return None
-        
-        if response.status_code == 200:
-            data = response.json()
-            if data.get("success"):
-                inbound = data.get("obj", {})
-                protocol = inbound.get("protocol", "vless").lower()
-                return self.get_client_config(inbound_id, email, protocol)
-        
-        return None
+            
+            # Определяем протокол из inbound
+            protocol = inbound.get("protocol", "vless").lower()
+            return self.get_client_config(inbound_id, email, protocol)
+        except Exception as e:
+            logger.error(f"Ошибка получения конфигурации по email: {e}", exc_info=True)
+            return None
     
     def add_client_to_inbound(self, inbound_id: int, email: str, 
                               uuid: Optional[str] = None, 
