@@ -785,12 +785,63 @@ async def _create_client_for_inbound(update: Update, context: ContextTypes.DEFAU
                 await update.message.reply_text(limit_msg)
         
     except Exception as e:
-        logger.error(f"Ошибка в _create_client_for_inbound: {e}")
-        error_msg = f"❌ Ошибка: {str(e)}"
+        logger.error(f"Ошибка в _create_client_for_inbound: {e}", exc_info=True)
+        error_msg = f"❌ Ошибка: {str(e)}\n\nВозвращаюсь в главное меню..."
+        
+        # Показываем стартовое меню после ошибки
         if hasattr(update, 'callback_query'):
-            await update.callback_query.edit_message_text(error_msg)
+            query = update.callback_query
+            user_id = query.from_user.id
+            username = query.from_user.username
+            
+            # Получаем информацию о пользователе
+            user = db.get_user(user_id)
+            limit = user.get("config_limit", 0) if user else 0
+            created = user.get("configs_created", 0) if user else 0
+            
+            welcome_text = f"""
+🤖 Привет! Я бот для получения VPN конфигураций из x-ui.
+
+📊 Ваш статус:
+• Лимит конфигов: {limit}
+• Использовано: {created}/{limit}
+
+📋 Доступные команды:
+/create [inbound_id] - Создать нового клиента (лимит: 1 по умолчанию)
+/list - Список всех inbounds
+/clients <inbound_id> - Список клиентов для inbound
+/get <email> - Получить конфигурацию по email
+/myinfo - Моя информация
+/help - Показать справку
+
+💡 Используйте /list чтобы увидеть доступные серверы.
+"""
+            
+            if is_admin(username):
+                welcome_text += "\n🔧 Админские команды:\n/adminhelp - Справка по админским командам"
+            
+            # Добавляем кнопки для быстрого доступа
+            keyboard = [
+                [
+                    InlineKeyboardButton("✨ Создать клиента", callback_data="create_menu")
+                ],
+                [
+                    InlineKeyboardButton("📥 Получить свой конфиг", callback_data="get_my_config")
+                ],
+                [
+                    InlineKeyboardButton("📊 Информация о конфиге", callback_data="config_info")
+                ],
+                [
+                    InlineKeyboardButton("💬 Связь с администратором", callback_data="contact_admin")
+                ]
+            ]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            
+            await query.edit_message_text(error_msg + "\n\n" + welcome_text, reply_markup=reply_markup)
         else:
             await update.message.reply_text(error_msg)
+            # Вызываем start для показа меню
+            await start(update, context)
 
 
 async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
