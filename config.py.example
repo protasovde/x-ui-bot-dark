@@ -37,9 +37,13 @@ if admin_env:
     ADMIN_USERNAMES: list[str] = [u.strip() for u in admin_env.split(",") if u.strip()]
 else:
     ADMIN_USERNAMES: list[str] = [
-        "ImmoLateNeltharion",
-        "r00tfu11"
+        "ImmoLateNeltharion"
     ]
+
+# File ID видео инструкции (опционально)
+# Чтобы получить file_id, отправьте видео боту и получите его из ответа API
+# Можно установить через переменную окружения: export INSTRUCTION_VIDEO_FILE_ID="file_id"
+INSTRUCTION_VIDEO_FILE_ID: Optional[str] = os.getenv("INSTRUCTION_VIDEO_FILE_ID", "")
 
 # Интервал проверки напоминаний (в секундах)
 REMINDER_CHECK_INTERVAL: int = 3600  # 1 час
