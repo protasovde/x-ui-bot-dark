@@ -53,18 +53,6 @@ logger = logging.getLogger(__name__)
 xui_client = XUIClient()
 db = Database()
 
-
-def check_access(username: Optional[str]) -> bool:
-    """Проверка доступа пользователя по username"""
-    if not ALLOWED_USERNAMES:
-        return True  # Открытый доступ
-    if not username:
-        return False  # Нет username - нет доступа
-    # Нормализуем username (убираем @ если есть)
-    username_normalized = username.lstrip('@').lower()
-    return username_normalized in [u.lstrip('@').lower() for u in ALLOWED_USERNAMES]
-
-
 def is_admin(username: Optional[str]) -> bool:
     """Проверка, является ли пользователь администратором по username"""
     if not username:
@@ -81,6 +69,28 @@ def is_admin(username: Optional[str]) -> bool:
     # Но это не используется, так как проверка идет только по username из config
     return False
 
+def check_access_db(username: Optional[str]) -> bool:
+    """Проверка доступа пользователя по username"""
+    if not username:
+        return False  # Нет username - нет доступа
+    # Нормализуем username (убираем @ если есть)
+    username_normalized = username.lstrip('@')
+    return db.get_allowed_user(username_normalized)
+
+def check_access(username: Optional[str]) -> bool:
+    """Проверка доступа пользователя по username"""
+
+    if is_admin(username):
+        return True
+    
+    if not ALLOWED_USERNAMES:
+        return check_access_db(username)
+    if not username:
+        return False  # Нет username - нет доступа
+
+    # Нормализуем username (убираем @ если есть)
+    username_normalized = username.lstrip('@').lower()
+    return username_normalized in [u.lstrip('@').lower() for u in ALLOWED_USERNAMES]
 
 async def save_bot_message_id(context: ContextTypes.DEFAULT_TYPE, user_id: int, message_id: int):
     """Сохранить message_id сообщения бота для возможного удаления"""
@@ -133,19 +143,19 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     username = update.effective_user.username
     full_name = update.effective_user.full_name
-    
-    # Регистрируем пользователя в базе при первом запуске
-    user = db.get_user(user_id)
-    if not user:
-        db.add_user(user_id, username, full_name, 1)  # Лимит по умолчанию: 1
-        user = db.get_user(user_id)
-    
+
     if not check_access(username):
         await update.message.reply_text(
             "❌ У вас нет доступа к этому боту.\n"
             "💡 Убедитесь, что у вас установлен username в настройках Telegram."
         )
         return
+    
+    # Регистрируем пользователя в базе при первом запуске
+    user = db.get_user(user_id)
+    if not user:
+        db.add_user(user_id, username, full_name, 1)  # Лимит по умолчанию: 1
+        user = db.get_user(user_id)
     
     # Проверяем наличие username
     if not username:
@@ -341,11 +351,14 @@ async def admin_help(update: Update, context: ContextTypes.DEFAULT_TYPE):
     username = update.effective_user.username
     
     if not is_admin(username):
-        await update.message.reply_text("❌ У вас нет прав администратора.")
+        #await update.message.reply_text("❌ У вас нет прав администратора.")
         return
     
     help_text = """
 🔧 Админские команды:
+
+/allowed <username> - Открыть доступ пользователя в боту
+Пример: /allowed @username
 
 /adduser <username> <limit> - Добавить пользователя по username и установить лимит
 Пример: /adduser @username 5
@@ -372,12 +385,12 @@ async def admin_help(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(help_text)
 
 
-async def add_user_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def admin_add_user_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Добавить пользователя (админ)"""
     username = update.effective_user.username
     
     if not is_admin(username):
-        await update.message.reply_text("❌ У вас нет прав администратора.")
+        #await update.message.reply_text("❌ У вас нет прав администратора.")
         return
     
     if len(context.args) < 2:
@@ -422,12 +435,12 @@ async def add_user_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(f"❌ Ошибка: {str(e)}")
 
 
-async def set_limit_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def admin_set_limit_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Установить лимит конфигов (админ)"""
     username = update.effective_user.username
     
     if not is_admin(username):
-        await update.message.reply_text("❌ У вас нет прав администратора.")
+        #await update.message.reply_text("❌ У вас нет прав администратора.")
         return
     
     if len(context.args) < 2:
@@ -470,12 +483,12 @@ async def set_limit_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(f"❌ Ошибка: {str(e)}")
 
 
-async def list_users_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def admin_list_users_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Показать список всех пользователей (админ)"""
     username = update.effective_user.username
     
     if not is_admin(username):
-        await update.message.reply_text("❌ У вас нет прав администратора.")
+        #await update.message.reply_text("❌ У вас нет прав администратора.")
         return
     
     users = db.get_all_users()
@@ -502,12 +515,12 @@ async def list_users_command(update: Update, context: ContextTypes.DEFAULT_TYPE)
     await update.message.reply_text(text)
 
 
-async def clear_database_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def admin_clear_database_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Очистить всю базу данных (админ)"""
     username = update.effective_user.username
     
     if not is_admin(username):
-        await update.message.reply_text("❌ У вас нет прав администратора.")
+        #await update.message.reply_text("❌ У вас нет прав администратора.")
         return
     
     try:
@@ -553,12 +566,12 @@ async def clear_database_command(update: Update, context: ContextTypes.DEFAULT_T
         await update.message.reply_text(f"❌ Ошибка при очистке базы данных: {str(e)}")
 
 
-async def delete_user_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def admin_delete_user_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Удалить все данные пользователя из базы (админ)"""
     username = update.effective_user.username
     
     if not is_admin(username):
-        await update.message.reply_text("❌ У вас нет прав администратора.")
+        #await update.message.reply_text("❌ У вас нет прав администратора.")
         return
     
     if len(context.args) < 1:
@@ -582,16 +595,16 @@ async def delete_user_command(update: Update, context: ContextTypes.DEFAULT_TYPE
             await update.message.reply_text(f"❌ {message}")
             
     except Exception as e:
-        logger.error(f"Ошибка в delete_user_command: {e}", exc_info=True)
+        logger.error(f"Ошибка в admin_delete_user_command: {e}", exc_info=True)
         await update.message.reply_text(f"❌ Ошибка: {str(e)}")
 
 
-async def extend_config_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def admin_extend_config_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Продлить срок действия конфига на +31 день (админ)"""
     username = update.effective_user.username
     
     if not is_admin(username):
-        await update.message.reply_text("❌ У вас нет прав администратора.")
+        #await update.message.reply_text("❌ У вас нет прав администратора.")
         return
     
     if len(context.args) < 1:
@@ -696,16 +709,16 @@ async def extend_config_command(update: Update, context: ContextTypes.DEFAULT_TY
     except ValueError:
         await update.message.reply_text("❌ Количество дней должно быть числом.")
     except Exception as e:
-        logger.error(f"Ошибка в extend_config_command: {e}", exc_info=True)
+        logger.error(f"Ошибка в admin_extend_config_command: {e}", exc_info=True)
         await update.message.reply_text(f"❌ Ошибка: {str(e)}")
 
 
-async def sync_reminders_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def admin_sync_reminders_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Синхронизировать напоминания из x-ui (админ)"""
     username = update.effective_user.username
     
     if not is_admin(username):
-        await update.message.reply_text("❌ У вас нет прав администратора.")
+        #await update.message.reply_text("❌ У вас нет прав администратора.")
         return
     
     try:
@@ -724,9 +737,41 @@ async def sync_reminders_command(update: Update, context: ContextTypes.DEFAULT_T
         )
         
     except Exception as e:
-        logger.error(f"Ошибка в sync_reminders_command: {e}")
+        logger.error(f"Ошибка в admin_sync_reminders_command: {e}")
         await update.message.reply_text(f"❌ Ошибка: {str(e)}")
 
+async def admin_allowed_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Добавить пользователя (админ)"""
+    username = update.effective_user.username
+
+    if not is_admin(username):
+        #await update.message.reply_text("❌ У вас нет прав администратора.")
+        return
+    
+    if len(context.args) < 1:
+        await update.message.reply_text(
+            "❌ Использование: /allowed <username>\n"
+            "Пример: /allowed @username 5"
+        )
+        return
+    
+    try:
+        username = context.args[0].lstrip('@')
+        
+        # Попробуем найти пользователя в базе по username
+        user = db.add_allowed_user(username)
+        if user:
+            await update.message.reply_text(
+                f"✅ Пользователь @{username} доступ предоставлен."
+            )
+        else:
+            await update.message.reply_text(
+                f"⚠️ Что то пошло не так."
+            )
+            
+    except Exception as e:
+        logger.error(f"Ошибка в admin_allowed_command: {e}")
+        await update.message.reply_text(f"❌ Ошибка: {str(e)}")
 
 # ========== ОСНОВНЫЕ КОМАНДЫ ==========
 
@@ -1469,11 +1514,14 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return
         elif data == "contact_admin":
             await query.answer("Открываю контакты администратора...")
+
+            admin_list = ', '.join(['@'+u.lstrip('@').lower() for u in ADMIN_USERNAMES])
+
             admin_text = """
 💬 Связь с администратором:
 
 👤 Администратор:
-• @ImmoLateNeltharion
+• {admin_list}
 
 📝 Для связи с администратором:
 1. Напишите администратору в Telegram
@@ -1484,7 +1532,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 • Увеличением лимита конфигов
 • Решением технических проблем
 • Вопросами по использованию бота
-""".format(username=username or "не указан")
+""".format(username=username or "не указан", admin_list=admin_list)
             
             await query.edit_message_text(admin_text)
             return
@@ -1687,13 +1735,14 @@ def main():
     
     # Админские команды
     application.add_handler(CommandHandler("adminhelp", admin_help))
-    application.add_handler(CommandHandler("adduser", add_user_command))
-    application.add_handler(CommandHandler("setlimit", set_limit_command))
-    application.add_handler(CommandHandler("extend", extend_config_command))
-    application.add_handler(CommandHandler("users", list_users_command))
-    application.add_handler(CommandHandler("cleardb", clear_database_command))
-    application.add_handler(CommandHandler("deleteuser", delete_user_command))
-    application.add_handler(CommandHandler("sync_reminders", sync_reminders_command))
+    application.add_handler(CommandHandler("adduser", admin_add_user_command))
+    application.add_handler(CommandHandler("setlimit", admin_set_limit_command))
+    application.add_handler(CommandHandler("extend", admin_extend_config_command))
+    application.add_handler(CommandHandler("users", admin_list_users_command))
+    application.add_handler(CommandHandler("cleardb", admin_clear_database_command))
+    application.add_handler(CommandHandler("deleteuser", admin_delete_user_command))
+    application.add_handler(CommandHandler("sync_reminders", admin_sync_reminders_command))
+    application.add_handler(CommandHandler("allowed", admin_allowed_command))
     
     application.add_handler(CallbackQueryHandler(button_callback))
     

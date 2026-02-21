@@ -15,6 +15,7 @@ ENV/
 *.sqlite3
 
 # Конфигурация с секретами
+start-bot.sh
 config.py
 upload.py
 setup_git.py

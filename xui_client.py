@@ -25,8 +25,8 @@ class XUIClient:
         try:
             # Пробуем оба варианта - /panel/panel/login и /panel/login
             login_urls = [
-                f"{self.base_url}/panel/panel/login",
-                f"{self.base_url}/panel/login"
+                #f"{self.base_url}/panel/panel/login",
+                f"{self.base_url}/login"
             ]
             
             for login_url in login_urls:
@@ -121,23 +121,23 @@ class XUIClient:
             # Приоритет: сначала пробуем наиболее вероятные варианты для 3x-ui
             url_methods = [
                 # Подтвержденный путь для 3x-ui (без /list)
-                (f"{self.base_url}/panel/panel/inbounds", "GET"),
-                (f"{self.base_url}/panel/panel/inbounds", "POST"),
+                #(f"{self.base_url}/panel/panel/inbounds", "GET"),
+                #(f"{self.base_url}/panel/panel/inbounds", "POST"),
                 # Варианты с /api/ для 3x-ui
-                (f"{self.base_url}/panel/panel/api/inbounds/list", "GET"),
-                (f"{self.base_url}/panel/panel/api/inbounds/list", "POST"),
-                (f"{self.base_url}/panel/panel/api/inbounds", "GET"),
-                (f"{self.base_url}/panel/panel/api/inbounds", "POST"),
+                #(f"{self.base_url}/panel/panel/api/inbounds/list", "GET"),
+                #(f"{self.base_url}/panel/panel/api/inbounds/list", "POST"),
+                #(f"{self.base_url}/panel/panel/api/inbounds", "GET"),
+                #(f"{self.base_url}/panel/panel/api/inbounds", "POST"),
                 # Стандартные endpoints согласно документации
                 (f"{self.base_url}/panel/api/inbounds/list", "GET"),
                 (f"{self.base_url}/panel/api/inbounds/list", "POST"),
                 (f"{self.base_url}/panel/api/inbounds", "GET"),
                 (f"{self.base_url}/panel/api/inbounds", "POST"),
                 # Варианты без /api/
-                (f"{self.base_url}/panel/inbounds/list", "GET"),
-                (f"{self.base_url}/panel/inbounds/list", "POST"),
-                (f"{self.base_url}/panel/inbounds", "GET"),
-                (f"{self.base_url}/panel/inbounds", "POST"),
+                #(f"{self.base_url}/panel/inbounds/list", "GET"),
+                #(f"{self.base_url}/panel/inbounds/list", "POST"),
+                #(f"{self.base_url}/panel/inbounds", "GET"),
+                #(f"{self.base_url}/panel/inbounds", "POST"),
             ]
             
             for url, method in url_methods:

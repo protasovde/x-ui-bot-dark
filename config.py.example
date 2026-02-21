@@ -25,10 +25,10 @@ ALLOWED_USERNAMES: list[str] = [
 ]
 
 # ID inbound по умолчанию (захардкожен для всех пользователей)
-DEFAULT_INBOUND_ID: int = 7
+DEFAULT_INBOUND_ID: int = int(os.getenv("DEFAULT_INBOUND_ID", 7))
 
 # Срок действия конфига в днях
-CONFIG_EXPIRY_DAYS: int = 31
+CONFIG_EXPIRY_DAYS: int = int(os.getenv("CONFIG_EXPIRY_DAYS", 31))
 
 # Администраторы бота (Telegram username без @)
 # Можно установить через переменную окружения ADMIN_USERNAMES (через запятую)
@@ -36,9 +36,7 @@ admin_env = os.getenv("ADMIN_USERNAMES", "")
 if admin_env:
     ADMIN_USERNAMES: list[str] = [u.strip() for u in admin_env.split(",") if u.strip()]
 else:
-    ADMIN_USERNAMES: list[str] = [
-        "ImmoLateNeltharion"
-    ]
+    ADMIN_USERNAMES: list[str] = []
 
 # File ID видео инструкции (опционально)
 # Чтобы получить file_id, отправьте видео боту и получите его из ответа API

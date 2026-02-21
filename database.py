@@ -26,6 +26,14 @@ class Database:
         """Инициализация базы данных"""
         conn = self.get_connection()
         cursor = conn.cursor()
+
+        # Таблица доступа к боту
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS alloved_users (
+                username TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
         
         # Таблица пользователей
         cursor.execute("""
@@ -69,6 +77,58 @@ class Database:
         conn.commit()
         conn.close()
         logger.info("База данных инициализирована")
+
+    def add_allowed_user(self, username):
+        """Открыть доступ пользователя в боту"""
+        try:
+            conn = self.get_connection()
+            cursor = conn.cursor()
+
+            # Проверяем, существует ли пользователь
+            cursor.execute("SELECT * FROM alloved_users WHERE username = ?", (username,))
+            existing = cursor.fetchone()
+
+            if existing:
+                logger.info(f"У юзера {username} есть доступ к боту")
+            else:
+                cursor.execute("""
+                    INSERT INTO alloved_users (username)
+                    VALUES (?)
+                """, (username,))
+                logger.info(f"Юзеру {username} открыт доступ к боту")
+            
+            conn.commit()
+            conn.close()
+            return True
+
+        except Exception as e:
+            logger.error(f"Ошибка что то пошло не так (add_allowed_user) {username}: {e}")
+            return False
+
+    def get_allowed_user(self, username):
+        """Проерка юреза доступа к боту"""
+        try:
+            result = False
+            conn = self.get_connection()
+            cursor = conn.cursor()
+
+            # Проверяем, существует ли пользователь
+            cursor.execute("SELECT * FROM alloved_users WHERE username = ?", (username,))
+            existing = cursor.fetchone()
+
+            if existing:
+                logger.info(f"У юзера {username} есть доступ к боту")
+                result = True
+            else:
+                logger.info(f"Юзеру {username} открыт доступ к боту")
+            
+            conn.commit()
+            conn.close()
+            return result
+
+        except Exception as e:
+            logger.error(f"Ошибка что то пошло не так (get_allowed_user) {username}: {e}")
+            return False
     
     def add_user(self, user_id: int, username: Optional[str] = None, 
                  full_name: Optional[str] = None, config_limit: int = 1) -> bool:
@@ -471,6 +531,7 @@ class Database:
             reminders_count = cursor.fetchone()[0]
             
             # Удаляем данные из всех таблиц
+            cursor.execute("DELETE FROM alloved_users WHERE username = ?", (normalized_username,))
             cursor.execute("DELETE FROM reminders WHERE user_id = ?", (user_id,))
             cursor.execute("DELETE FROM issued_configs WHERE user_id = ?", (user_id,))
             cursor.execute("DELETE FROM users WHERE user_id = ?", (user_id,))

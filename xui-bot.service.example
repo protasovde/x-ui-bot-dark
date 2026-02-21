@@ -8,9 +8,11 @@ User=root
 WorkingDirectory=/root/x-ui-bot
 Environment="TELEGRAM_BOT_TOKEN=your_bot_token_here"
 Environment="XUI_BASE_URL=http://your-server:port"
-Environment="XUI_USERNAME=your_username"
-Environment="XUI_PASSWORD=your_password"
-ExecStart=/usr/bin/python3 /root/x-ui-bot/bot.py
+Environment="DEFAULT_INBOUND_ID=7"
+Environment="CONFIG_EXPIRY_DAYS=31"
+Environment="ADMIN_USERNAMES="
+
+ExecStart=/bin/python3 /root/x-ui-bot/bot.py
 Restart=always
 RestartSec=10
 
