@@ -1296,7 +1296,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await _create_client_for_inbound(update, context, user_id, username, DEFAULT_INBOUND_ID)
             return
         elif data == "download_config":
-            await query.answer("Получаю ваш конфиг...")
+            await query.edit_message_text("⏳ Получаю конфигурацию...")
             
             # Проверяем наличие username
             if not username:
@@ -1307,8 +1307,6 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 return
             
             inbound_id = DEFAULT_INBOUND_ID
-            
-            await query.edit_message_text("⏳ Получаю конфигурацию...")
             
             # Получаем все конфиги пользователя
             user_configs = xui_client.get_user_configs(inbound_id, username)
@@ -1322,6 +1320,8 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             
             # Получаем протокол из inbound
             inbounds = xui_client.get_inbounds()
+
+            logger.info(f'Получил inbounds: {inbounds}')
             inbound = next((i for i in inbounds if i.get("id") == inbound_id), None)
             
             if not inbound:
@@ -1353,9 +1353,10 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     configs_text += f"📧 Конфиг #{i} ({email}):\n{config}\n\n"
                     configs_text += "─" * 30 + "\n\n"
             
-            if configs_found > 1000:
+            if configs_found > 0:
                 # Отправляем все конфигурации одним сообщением
-                await query.edit_message_text(configs_text)
+                # await query.edit_message_text(configs_text)
+                await query.edit_message_text(f"👇👇 Твой конфиг 👇👇")
                 
                 # Также отправляем каждую конфигурацию отдельным сообщением для удобства копирования
                 for i, config_data in enumerate(user_configs, 1):
@@ -1365,7 +1366,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     if config:
                         config_msg = await context.bot.send_message(
                             chat_id=query.message.chat_id,
-                            text=f"📧 Конфиг #{i} ({email}):\n\n{config}"
+                            text=f"{config}"
                         )
                         # Сохраняем message_id для возможного удаления
                         await save_bot_message_id(context, user_id, config_msg.message_id)
