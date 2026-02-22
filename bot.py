@@ -82,7 +82,7 @@ def check_access(username: Optional[str]) -> bool:
 
     if is_admin(username):
         return True
-    
+
     if not ALLOWED_USERNAMES:
         return check_access_db(username)
     if not username:
@@ -196,8 +196,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 🤖 Привет! Я бот для получения VPN конфигураций.
 
 📋 Что нужно сделать, чтобы начать:
-1. ✅ У вас установлен username: @{username}
-2. 📱 Используйте кнопки ниже для работы с ботом
+✅ У вас установлен username: @{username}
 
 📋 Доступные команды:
 • ✨ Создать конфиг - создать новый конфиг на 31 день
@@ -206,7 +205,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 • 📹 Инструкция - видео инструкция по использованию
 • 💬 Связь с администратором - связаться с админом
 
-💡 Используйте кнопки ниже или команду /start для открытия меню.
+💡 Используйте кнопки 👇 или команду /start для открытия меню.
 """.format(username=username)
     
     # Добавляем Inline кнопки для быстрого доступа
@@ -270,13 +269,13 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
     inline_msg = await context.bot.send_message(
         chat_id=update.message.chat_id,
-        text="💡 Используйте кнопки выше для работы с ботом.",
+        text="💡 Используйте кнопки 👇 для работы с ботом.",
         reply_markup=inline_markup
     )
     
     # Сохраняем message_id новых сообщений для возможного удаления
     await save_bot_message_id(context, user_id, menu_msg.message_id)
-    await save_bot_message_id(context, user_id, inline_msg.message_id)
+    # await save_bot_message_id(context, user_id, inline_msg.message_id)
 
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -1249,7 +1248,7 @@ async def _create_client_for_inbound(update: Update, context: ContextTypes.DEFAU
 • Информация о конфиге
 • Связь с администратором
 
-💡 Используйте кнопки ниже для работы с ботом.
+💡 Используйте кнопки 👇 для работы с ботом.
 """
             
             # Добавляем кнопки для быстрого доступа
@@ -1354,7 +1353,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     configs_text += f"📧 Конфиг #{i} ({email}):\n{config}\n\n"
                     configs_text += "─" * 30 + "\n\n"
             
-            if configs_found > 0:
+            if configs_found > 1000:
                 # Отправляем все конфигурации одним сообщением
                 await query.edit_message_text(configs_text)
                 
@@ -1408,11 +1407,12 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             for i, config_data in enumerate(user_configs, 1):
                 email = config_data["email"]
                 client = config_data["client"]
+                traffic = config_data["traffic"]
                 
                 # Получаем данные о трафике
-                total_traffic = client.get("total", 0)  # в байтах
-                up_traffic = client.get("up", 0)  # в байтах
-                down_traffic = client.get("down", 0)  # в байтах
+                total_traffic = traffic.get("allTime", 0)  # в байтах
+                up_traffic = traffic.get("up", 0)  # в байтах
+                down_traffic = traffic.get("down", 0)  # в байтах
                 
                 # Конвертируем в GB
                 total_gb = total_traffic / (1024 ** 3)
@@ -1420,7 +1420,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 down_gb = down_traffic / (1024 ** 3)
                 
                 # Получаем информацию о сроке действия
-                expire_time = client.get("expireTime", 0)
+                expire_time = traffic.get("expireTime", 0)
                 if expire_time > 0:
                     expire_date = datetime.fromtimestamp(expire_time / 1000)
                     now = datetime.now()
@@ -1429,12 +1429,20 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 else:
                     days_remaining = "∞"
                     expire_str = "Без ограничений"
+
+                lastOnline = traffic.get("lastOnline", 0)
+                if lastOnline > 0:
+                    last_date = datetime.fromtimestamp(lastOnline / 1000)
+                    last_str = last_date.strftime("%Y-%m-%d %H:%M")
+                else:
+                    last_str = "Нет"
                 
-                info_text += f"━━━━━━━━━━━━━━━━━━━━\n"
+                info_text += f"━━━━━━━━━━\n"
                 info_text += f"📧 Конфиг #{i}: {email}\n"
                 info_text += f"📈 Трафик: {total_gb:.2f} GB (↑{up_gb:.2f} ↓{down_gb:.2f})\n"
                 info_text += f"⏰ Осталось дней: {days_remaining}\n"
-                info_text += f"📅 До: {expire_str}\n\n"
+                info_text += f"📅 До: {expire_str}\n"
+                info_text += f"⏰ Последний вход: {last_str}\n\n"
             
             await query.edit_message_text(info_text)
             return

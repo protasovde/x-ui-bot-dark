@@ -101,6 +101,55 @@ class XUIClient:
         # x-ui может использовать cookie-based аутентификацию, которая работает через сессию
         if not self._login():
             raise Exception("Не удалось авторизоваться в x-ui")
+
+    def getTrafficByEmail(self, email: str):
+        '''Достать трафик клиента по email'''
+        try:
+            self._ensure_authenticated()
+        except Exception as e:
+            logger.error(f"Ошибка авторизации: {e}")
+            return []
+
+        try:
+
+            url_methods = [
+                # Стандартные endpoints согласно документации
+                (f"{self.base_url}/panel/api/inbounds/getClientTraffics/{email}", "GET"),
+                (f"{self.base_url}/panel/api/inbounds/getClientTraffics/{email}", "POST"),
+            ]
+
+            url = f"{self.base_url}/panel/api/inbounds/getClientTraffics/{email}"
+            logger.info(f"Попытка запроса списка getClientTraffics: {url}")
+
+            result = []
+
+            try:
+                # Устанавливаем заголовки для JSON API
+                headers = {
+                    "Accept": "application/json",
+                    "Content-Type": "application/json"
+                }
+                
+                response = self.session.get(url, headers=headers, timeout=10, allow_redirects=True)
+
+                logger.info(f"Ответ получения getClientTraffics: статус {response.status_code}, Content-Type: {response.headers.get('Content-Type', 'unknown')}")
+                logger.info(f'response: {response.json()}')
+
+                response_data = response.json()
+                if response_data.get("success"):
+                    obj = response_data.get("obj", [])
+                    logger.info(f"✅ Успешно получен трафик: {obj}")
+                    return obj if obj else []
+                else:
+                    return []
+
+            except Exception as e:
+                logger.error(f"Ошибка выполнения запроса получения трафика: {e}", exc_info=True)
+            return []
+
+        except Exception as e:
+            logger.error(f"Ошибка получения трафика: {e}", exc_info=True)
+            return []
     
     def get_inbounds(self) -> List[Dict[str, Any]]:
         """Получить список всех inbounds"""
@@ -452,25 +501,35 @@ class XUIClient:
                 client_email = client.get("email", "")
                 if client_email == base_username:
                     # Базовый email без номера
+
+                    user_traffic = self.getTrafficByEmail(client_email)
+
                     user_configs.append({
                         "email": client_email,
                         "number": 0,
-                        "client": client
+                        "client": client,
+                        "traffic": user_traffic
                     })
+
                 elif client_email.startswith(f"{base_username}_"):
                     # Email с номером (username_N)
                     suffix = client_email[len(f"{base_username}_"):]
                     try:
                         number = int(suffix)
+
+                        user_traffic = self.getTrafficByEmail(client_email)
+
                         user_configs.append({
                             "email": client_email,
                             "number": number,
-                            "client": client
+                            "client": client,
+                            "traffic": user_traffic
                         })
+
                     except ValueError:
                         # Если не число, игнорируем
                         pass
-            
+
             # Сортируем по номеру
             user_configs.sort(key=lambda x: x["number"])
             logger.info(f"Найдено конфигов для {base_username}: {len(user_configs)}")
@@ -919,13 +978,13 @@ class XUIClient:
             update_urls_to_try = [
                 # Варианты с /inbounds/ (с 's') - как в addClient и get_inbounds
                 f"{self.base_url}/panel/api/inbounds/update/{inbound_id}",
-                f"{self.base_url}/panel/panel/api/inbounds/update/{inbound_id}",
+                #f"{self.base_url}/panel/panel/api/inbounds/update/{inbound_id}",
                 # Варианты с /inbound/ (без 's')
-                f"{self.base_url}/panel/api/inbound/update/{inbound_id}",
-                f"{self.base_url}/panel/panel/api/inbound/update/{inbound_id}",
+                #f"{self.base_url}/panel/api/inbound/update/{inbound_id}",
+                #f"{self.base_url}/panel/panel/api/inbound/update/{inbound_id}",
                 # Варианты без /api/
-                f"{self.base_url}/panel/panel/inbound/update/{inbound_id}",
-                f"{self.base_url}/panel/inbound/update/{inbound_id}",
+                #f"{self.base_url}/panel/panel/inbound/update/{inbound_id}",
+                #f"{self.base_url}/panel/inbound/update/{inbound_id}",
             ]
             
             for test_url in update_urls_to_try:
