@@ -92,6 +92,16 @@ def check_access(username: Optional[str]) -> bool:
     username_normalized = username.lstrip('@').lower()
     return username_normalized in [u.lstrip('@').lower() for u in ALLOWED_USERNAMES]
 
+def trafficFormat( vol: int ):
+    in_gb = vol / (1024**3)
+
+    if in_gb >= 1:
+        return f"{in_gb:.2f} GB"
+
+    in_mb = vol / (1024**2)
+
+    return f"{in_mb:.2f} MB"
+
 async def save_bot_message_id(context: ContextTypes.DEFAULT_TYPE, user_id: int, message_id: int):
     """Сохранить message_id сообщения бота для возможного удаления"""
     try:
@@ -219,9 +229,10 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         ],
         [
             InlineKeyboardButton("📊 Информация", callback_data="config_info"),
-            InlineKeyboardButton("📹 Инструкция", callback_data="instruction")
+            InlineKeyboardButton("🤘 Продлить", callback_data="config_extend"),
         ],
-        [
+        [   
+            InlineKeyboardButton("📹 Инструкция", callback_data="instruction"),
             InlineKeyboardButton("💬 Связь с администратором", callback_data="contact_admin")
         ]
     ]
@@ -265,13 +276,14 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     menu_msg = await context.bot.send_message(
         chat_id=update.message.chat_id,
         text=welcome_text,
-        reply_markup=reply_markup
-    )
-    inline_msg = await context.bot.send_message(
-        chat_id=update.message.chat_id,
-        text="💡 Используйте кнопки 👇 для работы с ботом.",
         reply_markup=inline_markup
+        #reply_markup=reply_markup
     )
+    #inline_msg = await context.bot.send_message(
+    #    chat_id=update.message.chat_id,
+    #    text="💡 Используйте кнопки 👇 для работы с ботом.",
+    #    reply_markup=inline_markup
+    #)
     
     # Сохраняем message_id новых сообщений для возможного удаления
     await save_bot_message_id(context, user_id, menu_msg.message_id)
@@ -289,17 +301,8 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     help_text = """
 📖 Справка по использованию бота:
 
-/create [inbound_id] - Создать нового клиента
-Пример: /create или /create 5
+/create - Создать конфиг клиента
 💡 По умолчанию каждый пользователь может создать 1 клиента
-
-/list - Показать список всех доступных inbounds с их ID
-
-/clients <inbound_id> - Показать список всех клиентов для указанного inbound
-Пример: /clients 1
-
-/get <email> - Получить конфигурацию клиента по email
-Пример: /get user@example.com
 
 /myinfo - Показать информацию о вашем аккаунте
 
@@ -1014,6 +1017,8 @@ async def create_client(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text("❌ ID inbound должен быть числом.")
             return
     
+    return
+
     # Иначе показываем список inbounds с кнопками
     try:
         loading_msg = await update.message.reply_text("⏳ Получаю список серверов...")
@@ -1112,7 +1117,7 @@ async def _create_client_for_inbound(update: Update, context: ContextTypes.DEFAU
             return
         
         # Вычисляем expire_time в миллисекундах (31 день)
-        from datetime import datetime, timedelta
+        
         expire_date = datetime.now() + timedelta(days=CONFIG_EXPIRY_DAYS)
         expire_time = int(expire_date.timestamp() * 1000)
         
@@ -1289,6 +1294,8 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     data = query.data
     
+    #logger.info(f'button_callback: {data}')
+
     try:
         # Обработка кнопок меню
         if data == "create_config":
@@ -1416,12 +1423,12 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 down_traffic = traffic.get("down", 0)  # в байтах
                 
                 # Конвертируем в GB
-                total_gb = total_traffic / (1024 ** 3)
-                up_gb = up_traffic / (1024 ** 3)
-                down_gb = down_traffic / (1024 ** 3)
+                total_gb = trafficFormat(total_traffic)
+                up_gb = trafficFormat(up_traffic)
+                down_gb = trafficFormat(down_traffic)
                 
                 # Получаем информацию о сроке действия
-                expire_time = traffic.get("expireTime", 0)
+                expire_time = traffic.get("expiryTime", 0)
                 if expire_time > 0:
                     expire_date = datetime.fromtimestamp(expire_time / 1000)
                     now = datetime.now()
@@ -1440,7 +1447,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 
                 info_text += f"━━━━━━━━━━\n"
                 info_text += f"📧 Конфиг #{i}: {email}\n"
-                info_text += f"📈 Трафик: {total_gb:.2f} GB (↑{up_gb:.2f} ↓{down_gb:.2f})\n"
+                info_text += f"📈 Трафик: {total_gb} (↑{up_gb} ↓{down_gb})\n"
                 info_text += f"⏰ Осталось дней: {days_remaining}\n"
                 info_text += f"📅 До: {expire_str}\n"
                 info_text += f"⏰ Последний вход: {last_str}\n\n"
@@ -1520,6 +1527,95 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             # Отправляем ссылки на приложения
             await send_app_links(context, query.message.chat_id, user_id)
             
+            return
+        elif data == "config_extend":
+            await query.edit_message_text("Устанавливаю связь с космосом...")
+
+            # Проверяем наличие username
+            if not username:
+                await query.edit_message_text(
+                    "❌ У вас не установлен username в настройках Telegram.\n"
+                    "💡 Установите username в настройках Telegram для получения конфига."
+                )
+                return
+            
+            inbound_id = DEFAULT_INBOUND_ID
+            
+            # Получаем все конфиги пользователя
+            user_configs = xui_client.get_user_configs(inbound_id, username)
+            
+            if not user_configs:
+                await query.edit_message_text(
+                    "❌ У вас нет созданных конфигов.\n"
+                    "💡 Используйте кнопку '✨ Создать конфиг' для создания нового конфига."
+                )
+                return
+            
+            # Получаем протокол из inbound
+            inbounds = xui_client.get_inbounds()
+
+            logger.info(f'Получил inbounds: {inbounds}')
+            inbound = next((i for i in inbounds if i.get("id") == inbound_id), None)
+            
+            if not inbound:
+                await query.edit_message_text("❌ Не удалось получить информацию о сервере.")
+                return
+            
+            protocol = inbound.get("protocol", "vless").lower()
+            
+            # Получаем все конфигурации для всех конфигов пользователя
+            configs_text = f"📥 Ваши конфигурации ({len(user_configs)} шт.):\n\n"
+            configs_found = 0
+
+            from datetime import datetime, timedelta
+
+            for i, config_data in enumerate(user_configs, 1):
+                email = config_data["email"]
+                config = xui_client.get_client_config(inbound_id, email, protocol)
+                
+                if config:
+                    configs_found += 1
+                    # Записываем выдачу конфига
+                    db.record_issued_config(user_id, email, inbound_id)
+                    
+                    # Получаем информацию о клиенте для напоминаний
+                    client = config_data["client"]
+                    
+                    if client and client.get("expiryTime", 0) >= 0:
+                        # проверить сколько дней до просрочки 
+
+                        # Получаем информацию о сроке действия
+                        expire_time = client.get("expiryTime", 0)
+                        if expire_time > 0:
+                            expire_date = datetime.fromtimestamp(expire_time / 1000)
+                            now = datetime.now()
+                            days_remaining = (expire_date - now).days
+                            expire_date_text = expire_date.strftime("%Y-%m-%d %H:%M")
+                            if days_remaining >= 3:
+                                configs_text += f"Конфиг {email} осталось дней: {days_remaining}\n"
+                                configs_text += f"Действует до {expire_date_text}\n"
+                            else:
+
+                                success = xui_client.update_client_expiry(inbound_id, email, CONFIG_EXPIRY_DAYS)
+
+                                if success:
+                                    new_expire_date = datetime.now() + timedelta(days=CONFIG_EXPIRY_DAYS)
+                                    new_expire_time = int(new_expire_date.timestamp() * 1000)
+
+                                    expire_str = new_expire_date.strftime("%Y-%m-%d %H:%M")
+
+                                    configs_text += f"Конфиг {email} продлен до {expire_str}\n"
+                                else:
+                                    configs_text += f"Не удалось продлить конфиг {email}\n"
+                        else:
+                            configs_text += f"Конфиг {email} без ограничений\n"
+
+            await query.edit_message_text(configs_text)
+                    
+            if configs_found == 0:
+                await query.edit_message_text(
+                    "❌ Не удалось получить конфигурации."
+                )
             return
         elif data == "contact_admin":
             await query.answer("Открываю контакты администратора...")
@@ -1737,9 +1833,9 @@ def main():
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("help", help_command))
     application.add_handler(CommandHandler("myinfo", myinfo_command))
-    application.add_handler(CommandHandler("list", list_inbounds))
-    application.add_handler(CommandHandler("clients", list_clients))
-    application.add_handler(CommandHandler("get", get_config))
+    #application.add_handler(CommandHandler("list", list_inbounds))
+    #application.add_handler(CommandHandler("clients", list_clients))
+    #application.add_handler(CommandHandler("get", get_config))
     application.add_handler(CommandHandler("create", create_client))
     
     # Админские команды
