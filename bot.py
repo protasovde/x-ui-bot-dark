@@ -1090,9 +1090,11 @@ async def create_client(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def _create_client_for_inbound(update: Update, context: ContextTypes.DEFAULT_TYPE, 
                                      user_id: int, username: Optional[str], inbound_id: int):
     """Создать клиента для указанного inbound"""
+
     try:
         # Проверяем лимит еще раз
         can_create, message = db.can_create_config(user_id)
+
         if not can_create:
             if hasattr(update, 'message') and update.message:
                 await update.message.reply_text(f"❌ {message}")
@@ -1641,130 +1643,8 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             
             await query.edit_message_text(admin_text)
             return
-        elif data.startswith("create_"):
-            # Создать клиента для inbound (старая логика, оставляем для совместимости)
-            inbound_id = int(data.split("_")[1])
-            await _create_client_for_inbound(update, context, user_id, username, inbound_id)
-            
-        elif data.startswith("clients_"):
-            # Показать клиентов для inbound
-            inbound_id = int(data.split("_")[1])
-            
-            await query.edit_message_text(f"⏳ Получаю список клиентов...")
-            
-            clients = xui_client.get_inbound_clients(inbound_id)
-            
-            if not clients:
-                await query.edit_message_text(f"❌ Не найдено клиентов для inbound {inbound_id}.")
-                return
-            
-            text = f"📋 Клиенты для inbound {inbound_id}:\n\n"
-            keyboard = []
-            
-            for client in clients:
-                email = client.get("email", "N/A")
-                total = client.get("total", 0)
-                expire = client.get("expireTime", 0)
+
                 
-                text += f"📧 Email: {email}\n"
-                text += f"📊 Трафик: {total / (1024**3):.2f} GB\n"
-                if expire > 0:
-                    expire_date = datetime.fromtimestamp(expire / 1000)
-                    text += f"⏰ Истекает: {expire_date.strftime('%Y-%m-%d %H:%M')}\n"
-                text += "─" * 20 + "\n\n"
-            
-            # Добавляем кнопки для каждого клиента в одну строку (2 кнопки в ряд)
-            buttons_per_row = 2
-            for i, client in enumerate(clients):
-                email = client.get("email", "N/A")
-                
-                if i % buttons_per_row == 0:
-                    # Начинаем новую строку
-                    keyboard.append([])
-                
-                # Добавляем кнопку для получения конфига
-                keyboard[-1].append(
-                    InlineKeyboardButton(
-                        f"📥 {email[:15]}",
-                        callback_data=f"get_{inbound_id}_{email}"
-                    )
-                )
-            
-            if not keyboard or not any(keyboard):
-                await query.edit_message_text("❌ Не удалось создать кнопки для клиентов.")
-                return
-            
-            reply_markup = InlineKeyboardMarkup(keyboard)
-            total_buttons = sum(len(row) for row in keyboard)
-            logger.info(f"Отправляю список клиентов с {len(keyboard)} строками кнопок, всего {total_buttons} кнопок")
-            
-            try:
-                await query.edit_message_text(text, reply_markup=reply_markup)
-            except Exception as e:
-                logger.error(f"Ошибка при отправке сообщения с кнопками: {e}")
-                await query.edit_message_text(f"❌ Ошибка при отправке кнопок: {str(e)}")
-            
-        elif data.startswith("get_"):
-            # Получить конфигурацию
-            parts = data.split("_", 2)
-            if len(parts) >= 3:
-                inbound_id = int(parts[1])
-                email = parts[2]
-                
-                # Проверяем лимит
-                can_create, message = db.can_create_config(user_id)
-                if not can_create:
-                    await query.answer(message, show_alert=True)
-                    return
-                
-                await query.edit_message_text(f"⏳ Получаю конфигурацию для {email}...")
-                
-                # Получаем протокол из inbound
-                inbounds = xui_client.get_inbounds()
-                inbound = next((i for i in inbounds if i.get("id") == inbound_id), None)
-                
-                if inbound:
-                    protocol = inbound.get("protocol", "vless").lower()
-                    config = xui_client.get_client_config(inbound_id, email, protocol)
-                    
-                    if config:
-                        # Записываем выдачу конфига
-                        db.record_issued_config(user_id, email, inbound_id)
-                        
-                        # Получаем информацию о клиенте для напоминаний
-                        clients = xui_client.get_inbound_clients(inbound_id)
-                        client = next((c for c in clients if c.get("email") == email), None)
-                        
-                        if client and client.get("expireTime", 0) > 0:
-                            db.add_reminder(user_id, email, inbound_id, client.get("expireTime"))
-                        
-                        # Не используем Markdown для конфигурации, так как она содержит специальные символы
-                        await query.edit_message_text(
-                            f"✅ Конфигурация для {email}:\n\n"
-                            f"{config}"
-                        )
-                        
-                        # Отправляем конфигурацию отдельным сообщением
-                        await context.bot.send_message(
-                            chat_id=query.message.chat_id,
-                            text=config
-                        )
-                        
-                        # Обновляем информацию о лимите
-                        user = db.get_user(user_id)
-                        if user:
-                            limit = user.get("config_limit", 0)
-                            created = user.get("configs_created", 0)
-                            remaining = max(0, limit - created)
-                            await context.bot.send_message(
-                                chat_id=query.message.chat_id,
-                                text=f"📊 Осталось конфигов: {remaining}/{limit}"
-                            )
-                    else:
-                        await query.edit_message_text(f"❌ Не удалось получить конфигурацию для {email}.")
-                else:
-                    await query.edit_message_text(f"❌ Inbound {inbound_id} не найден.")
-                    
     except Exception as e:
         logger.error(f"Ошибка в button_callback: {e}")
         await query.edit_message_text(f"❌ Ошибка: {str(e)}")
